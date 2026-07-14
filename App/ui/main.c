@@ -380,7 +380,7 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
     const uint8_t innerL = 1u;
     const uint8_t innerR = (uint8_t)(innerL + abW - 1u);
     const uint8_t rxX = (uint8_t)(4u + abW + 1u + 3u);
-    const uint8_t txX = (uint8_t)(innerR + 2u + 4u);
+    const uint8_t txX = (uint8_t)(innerR + 2u + 5u);
 
     const bool    showAb = (!rxHere) || s_DualVfoAbBlinkShowAb;
     const uint8_t yTopC  = (y >= 1u) ? (uint8_t)(y - 1u) : 0u;
