@@ -380,7 +380,7 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
     const uint8_t innerL = 1u;
     const uint8_t innerR = (uint8_t)(innerL + abW - 1u);
     const uint8_t rxX = (uint8_t)(4u + abW + 1u + 3u);
-    const uint8_t txX = (uint8_t)(innerR + 2u + 3u);
+    const uint8_t txX = (uint8_t)(innerR + 2u + 4u);
 
     const bool    showAb = (!rxHere) || s_DualVfoAbBlinkShowAb;
     const uint8_t yTopC  = (y >= 1u) ? (uint8_t)(y - 1u) : 0u;
@@ -612,7 +612,21 @@ static void DualVfoDrawTopChannel(unsigned int vfoIdx)
     /* A/B 下 1px 间隔后左侧显示信道号 */
     if (!FUNCTION_IsRx() && gCurrentFunction != FUNCTION_TRANSMIT)
         DualVfoDrawChIdSmallest(vfoIdx, 15u, DV_Y_TOP_CHID);
-    if (gDualWatchActive)
+    if (FUNCTION_IsRx())
+    {
+        const uint16_t t = (uint16_t)(3600u - (uint16_t)(gRxTimerCountdown_500ms / 2u));
+        char           buf[8];
+        sprintf(buf, "%02u:%02u", (unsigned)(t / 60u), (unsigned)(t % 60u));
+        DualVfoU8g2_DrawSmallText(buf, 2u, DV_Y_TOP_DET, true);
+    }
+    else if (gCurrentFunction == FUNCTION_TRANSMIT)
+    {
+        const uint16_t t = (uint16_t)(gTxTimerCountdown_500ms / 2u);
+        char           buf[8];
+        sprintf(buf, "%02u:%02u", (unsigned)(t / 60u), (unsigned)(t % 60u));
+        DualVfoU8g2_DrawSmallText(buf, 2u, DV_Y_TOP_DET, true);
+    }
+    else if (gDualWatchActive)
         DualVfoU8g2_DrawSmallText("DWR", 2u, DV_Y_TOP_DET, true);
 
     {
@@ -1394,9 +1408,9 @@ void UI_DisplayAudioScope(void)
             const uint8_t strip_top    = DV_Y_TOP_DET;
             const uint8_t strip_bottom = (uint8_t)(DV_Y_TOP_DET + 6u);
 
-            DualVfoClearRectPx(0, strip_top, (uint8_t)(LCD_WIDTH - 1u), strip_bottom);
+            DualVfoClearRectPx(24u, strip_top, (uint8_t)(LCD_WIDTH - 1u), strip_bottom);
 
-            for (col_idx = 0u; col_idx < SCOPE_SAMPLES; col_idx++) {
+            for (col_idx = 8u; col_idx < SCOPE_SAMPLES; col_idx++) {
                 uint8_t        idx;
                 uint16_t       sample_above_floor;
                 uint8_t        height;
@@ -1451,7 +1465,7 @@ void UI_DisplayAudioScope(void)
             p_line = gFrameBuffer[line];
             memset(p_line, 0, LCD_WIDTH);
 
-            for (col_idx = 0u; col_idx < SCOPE_SAMPLES; col_idx++) {
+            for (col_idx = 8u; col_idx < SCOPE_SAMPLES; col_idx++) {
                 uint8_t        idx;
                 uint16_t       sample_above_floor;
                 uint8_t        height;
