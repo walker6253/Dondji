@@ -22,7 +22,7 @@
 /* 下面板反色条 y=29..35；副频擦除勿碰该行 */
 #define DUALVFO_SUB_FREQ_CLEAR_YTOP_MIN 36u
 /* 副频 blit 底边；基线下移后需含 baseline+3；左侧 S 表区由底栏单独清屏 */
-#define DUALVFO_SUB_FREQ_BLIT_YMAX 50u
+#define DUALVFO_SUB_FREQ_BLIT_YMAX 47u
 
 static u8g2_t s_u8g2;
 static uint8_t s_u8g2_ready;

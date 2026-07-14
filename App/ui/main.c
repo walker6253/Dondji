@@ -150,7 +150,7 @@ static void DualVfoFmtChId(unsigned int vfoIdx, char *out, size_t outLen)
 {
     const uint16_t ch = gEeprom.ScreenChannel[vfoIdx];
     if (IS_MR_CHANNEL(ch))
-        snprintf(out, outLen, "M-%04u", (unsigned)(ch + 1u));
+        snprintf(out, outLen, "M-%u", (unsigned)(ch + 1u));
     else if (IS_FREQ_CHANNEL(ch))
     {
         const uint8_t f   = (uint8_t)(1u + ch - FREQ_CHANNEL_FIRST);
@@ -213,10 +213,10 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #define DV_Y_BOT_BESIDE_AB  (DV_Y_BOT_MAIN + 2u) /* 框旁信道号、RX、TX 字下移 2px */
 #define DV_Y_BOT_FREQ_LINE  ((DV_Y_BOT_MAIN + DUAL_VFO_AB_BOT_H + 1u) - 9u) /* 相对 -10 参考：下移 1px（整串含末两位） */
 /* 底栏：S 表在左；右为电池 8px + 其下居中百分比；DV_Y_METER 对齐电池页顶 */
-#define DV_Y_METER          50u /* 电池图标（及底栏）下移 2px */
+#define DV_Y_METER          52u /* 电池图标（及底栏）下移 2px */
 #define DV_BAT_ICON_H       8u
-#define DV_Y_PCT            (DV_Y_METER + DV_BAT_ICON_H - 1u) /* 百分比下移 1px */
-#define DV_Y_RXMODE         (DV_Y_METER + 7u)            /* 右下角 A/B 模式上移 4px */
+#define DV_Y_PCT            57u /* 百分比下移 1px */
+#define DV_Y_RXMODE         57u            /* 右下角 A/B 模式上移 4px */
 #define DV_BAT_FLUSH_RIGHT  0u /* batX = LCD_WIDTH - batW - 此值，0 即贴右 */
 #define DV_BAT_MODE_SHIFT_R (-1) /* 右下角 A/B 模式相对原布局左移 3px（原 +2 -> 现 -1） */
 #define DV_BAT_PCT_SHIFT_R  2u /* 电量百分比再右移 */
@@ -363,6 +363,9 @@ static unsigned s_DualVfoAbBlinkPrevRxVfo;
  * 仅当本 VFO 正在接收时 A/B 随 s_DualVfoAbBlinkShowAb 间歇擦除（闪烁）；RX/TX 字每帧照画。
  * labelY：框旁 RX/TX 最小字基线 y（上面板与 y 相同；下面板为 DV_Y_BOT_BESIDE_AB）。
  * rxBesideAb：主信道在框旁画 RX；副信道 RX 由 DualVfoDrawBottomChannel 绘制（与框隔 2px）。 */
+static uint8_t s_dual_vfo_last_speaking_channel = 0u;
+static bool s_dual_vfo_has_rx_channel_history = false;
+
 static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int activeTxVFO,
                                     bool topInverseStyle, bool rxBesideAb, uint8_t abW, uint8_t abH,
                                     uint8_t labelY)
@@ -415,6 +418,11 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
                 DualVfoU8g2_DrawSmallText(abStr, tx, ty, true);
             }
         }
+    }
+
+    if (s_dual_vfo_has_rx_channel_history && s_dual_vfo_last_speaking_channel == vfoIdx)
+    {
+        DualVfoU8g2_DrawSmallText("<", (uint8_t)(innerR + 2u), labelY, true);
     }
 
     if (rxHere)
@@ -513,8 +521,6 @@ static void DualVfoDrawMainFreq2x(unsigned int vfoIdx, uint32_t frequency, bool 
         x0 = 44u;
     {
         const uint8_t xf = DualVfoU8g2_MainFreqComputeDrawX(frequency, x0);
-        /* 仅主频 u8g2 数字（含末两位）用 xf 右移；Tx 偏置小字仍按名义左缘 x0 居中，避免牵动其它元素 */
-        DualVfoDrawTxOffsetSmallCentered(vfoIdx, DV_TXOFS_GAP_L_MAIN, x0, (uint8_t)(DV_Y_TOP_CH + 3u));
         DualVfoU8g2_DrawMainFreqStrip(frequency, xf, (uint8_t)(DV_Y_TOP_CH + 11u));
         if (invertTail)
             DualVfoXorHStripColumns(xf, DV_Y_TOP_CH, (uint8_t)(DV_Y_TOP_CH + 11u));
@@ -546,29 +552,41 @@ static void DualVfoDrawTopDetailRowPx(unsigned int topVfoIdx, uint8_t y)
         gSetting_mic_bar_display == MIC_BAR_DISPLAY_BAR &&
         gCurrentFunction == FUNCTION_TRANSMIT)
     {
-        /* 该行由 UI_DisplayAudioScope 双守分支绘制（DV_Y_TOP_DET 像素带） */
         return;
     }
 #endif
     const VFO_Info_t *v = &gEeprom.VfoInfo[topVfoIdx];
     char              buf[48];
-    uint8_t           sq = gEeprom.SQUELCH_LEVEL;
-    if (sq > 9u)
-        sq = 9u;
-    snprintf(buf, sizeof(buf), "SQ%u", sq);
-    if ((v->StepFrequency / 100u) < 100u)
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), " %d.%02uK", v->StepFrequency / 100,
-                 v->StepFrequency % 100);
-    else
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), " %dK", v->StepFrequency / 100);
-    DualVfoAppendTone(buf, sizeof(buf), 'R', &v->freq_config_RX);
-    DualVfoAppendTone(buf, sizeof(buf), 'T', &v->freq_config_TX);
+    unsigned int      pos = 0;
+    buf[0] = '\0';
+
+    {
+        unsigned          d = (unsigned)v->TX_OFFSET_FREQUENCY_DIRECTION % 3u;
+        if (d != TX_OFFSET_FREQUENCY_DIRECTION_OFF)
+        {
+            char             num[16];
+            const uint32_t   o = v->TX_OFFSET_FREQUENCY;
+            DualVfoFmtTxOffsMHzTrim(num, sizeof(num), o);
+            pos += (unsigned int)sprintf(buf + pos, "%s %s", gSubMenu_SFT_D[d], num);
+        }
+    }
+    if (pos > 0)
+    {
+        buf[pos] = ' ';
+        pos++;
+        buf[pos] = '\0';
+    }
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'R', &v->freq_config_RX);
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'T', &v->freq_config_TX);
     {
         const unsigned int lw = (unsigned int)DualVfoU8g2_GetSmallTextWidth(buf);
         const uint8_t      x  = (lw < LCD_WIDTH - 4u) ? (uint8_t)(LCD_WIDTH - 2u - lw) : 2u;
         DualVfoU8g2_DrawSmallText(buf, x, y, true);
     }
 }
+
+
+
 
 static void DualVfoDrawTopChannel(unsigned int vfoIdx)
 {
@@ -622,8 +640,6 @@ static void DualVfoDrawTopChannel(unsigned int vfoIdx)
                         x0 = 2u;
                     if (x0 < 44u)
                         x0 = 44u;
-                    DualVfoDrawTxOffsetSmallCentered(vfoIdx, DV_TXOFS_GAP_L_MAIN, x0,
-                                                     (uint8_t)(DV_Y_TOP_CH + 3u));
                 }
                 if (rxHere)
                     UI_PrintStringSmallAtPixelCnInverse(cn, DUAL_VFO_FREQ_COL, 127, 9, 20);
@@ -676,7 +692,7 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
         /* 框右缘 innerR=1+abW-1 后留 2px 再画信道号；接收只画 RX、不画信道号 */
         {
             char            chId[14];
-            const uint8_t besideX0 = (uint8_t)(1u + DUAL_VFO_AB_BOT_W + 2u); /* innerR + 1 + 2px 间隔 */
+            const uint8_t besideX0 = (uint8_t)(1u + DUAL_VFO_AB_BOT_W + 5u); /* innerR + 1 + 5px 间隔，为箭头预留 */
             if (rxHere)
                 DualVfoU8g2_DrawSmallText("RX", besideX0, DV_Y_BOT_BESIDE_AB, true);
             else
@@ -723,6 +739,7 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
                 DualVfoDrawSubFreqSmallest(DV_Y_BOT_FREQ_LINE, frequency, rxHere || txHere);
         }
     }
+
 }
 
 /* 与菜单 RxMode（gSubMenu_RXMode）四项顺序一致，底栏单行缩写 */
@@ -789,69 +806,33 @@ static void DualVfoDrawSmeterBoxesUv(uint8_t s_level, uint8_t x, uint8_t y)
     }
 }
 
-static uint8_t s_dual_vfo_last_speaking_channel = 0u;
-static bool s_dual_vfo_has_rx_channel_history = false;
-
-static void DualVfoDrawBottomStatusBar(uint8_t left_limit_x, uint8_t right_limit_x)
+static void DualVfoUpdateLastSpeaker(void)
 {
-    (void)left_limit_x;
-    (void)right_limit_x;
-
-    const bool is_receiving_signal = FUNCTION_IsRx();
-    if (is_receiving_signal)
+    static uint16_t s_prev_channel[2] = {0xFFFFu, 0xFFFFu};
+    if (gEeprom.ScreenChannel[0] != s_prev_channel[0] ||
+        gEeprom.ScreenChannel[1] != s_prev_channel[1])
+    {
+        s_dual_vfo_has_rx_channel_history = false;
+        s_prev_channel[0] = gEeprom.ScreenChannel[0];
+        s_prev_channel[1] = gEeprom.ScreenChannel[1];
+    }
+    if (FUNCTION_IsRx())
     {
         const uint8_t current_rx_channel = gEeprom.RX_VFO;
-        const bool current_rx_channel_is_valid = (current_rx_channel <= 1u);
-        if (current_rx_channel_is_valid)
+        if (current_rx_channel <= 1u)
         {
             s_dual_vfo_last_speaking_channel = current_rx_channel;
             s_dual_vfo_has_rx_channel_history = true;
         }
     }
-
-    const bool has_active_rx_channel = s_dual_vfo_has_rx_channel_history;
-    const uint8_t active_channel = s_dual_vfo_last_speaking_channel;
-
-    char line_1_text[16];
-    char line_2_text[16];
-    char arrow_text[4];
-    if (active_channel == 0u)
-    {
-        strcpy(line_1_text, "LAST A");
-        strcpy(line_2_text, "B");
-        strcpy(arrow_text, "<<");
-    }
-    else
-    {
-        strcpy(line_1_text, "LAST A");
-        strcpy(line_2_text, "B");
-        strcpy(arrow_text, "<<");
-    }
-
-    const uint8_t line_1_prefix_width = DualVfoU8g2_GetSmallTextWidth("LAST ");
-    const uint8_t channel_letter_width = DualVfoU8g2_GetSmallTextWidth("A");
-    const uint8_t arrow_gap_width = DualVfoU8g2_GetSmallTextWidth(" ");
-
-    const unsigned int status_anchor_x = 54u;
-    const unsigned int line_1_x_u = status_anchor_x;
-    const unsigned int line_2_x_u = line_1_x_u + (unsigned int)line_1_prefix_width;
-    const unsigned int arrow_x_u = line_2_x_u + (unsigned int)channel_letter_width + (unsigned int)arrow_gap_width;
-    const uint8_t line_1_x = (uint8_t)line_1_x_u;
-    const uint8_t line_2_x = (uint8_t)line_2_x_u;
-    const uint8_t arrow_x = (uint8_t)arrow_x_u;
-
-    DualVfoClearRectPx((uint8_t)status_anchor_x, DV_STATUS_BAR_LINE1_Y, (uint8_t)(status_anchor_x + 34u), (uint8_t)(DV_STATUS_BAR_LINE2_Y + 6u));
-    DualVfoU8g2_DrawSmallText(line_1_text, line_1_x, DV_STATUS_BAR_LINE1_Y, true);
-    DualVfoU8g2_DrawSmallText(line_2_text, line_2_x, DV_STATUS_BAR_LINE2_Y, true);
-    if (has_active_rx_channel && active_channel == 0u)
-    {
-        DualVfoU8g2_DrawSmallText(arrow_text, arrow_x, DV_STATUS_BAR_LINE1_Y, true);
-    }
-    else if (has_active_rx_channel)
-    {
-        DualVfoU8g2_DrawSmallText(arrow_text, arrow_x, DV_STATUS_BAR_LINE2_Y, true);
-    }
 }
+
+static void DualVfoDrawBottomStatusBar(uint8_t left_limit_x, uint8_t right_limit_x)
+{
+    (void)left_limit_x;
+    (void)right_limit_x;
+}
+
 
 /* 主画布最底行：S 表 + S 值 + 电池（最后绘制，独占一行） */
 static void DualVfoDrawBottomSMeterAndBattery(void)
@@ -910,108 +891,94 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
 
     {
         const unsigned batW = (unsigned int)UI_BATTERY_ICON_WIDTH;
-        const unsigned batX = LCD_WIDTH - batW - DV_BAT_FLUSH_RIGHT;
         uint8_t        bat[UI_BATTERY_ICON_WIDTH];
-
-        for (unsigned c = batX; c < LCD_WIDTH; c++)
-        {
-            rowFb[c] = 0;
-            rowFbNext[c] = 0;
-        }
-        UI_DrawBattery(bat, gBatteryDisplayLevel, gLowBatteryBlink);
-        memcpy(rowFb + batX, bat, batW);
+        const uint8_t  gap = 2u;
 
         char pb[8];
         const bool draw_side_text = UI_FormatBatteryStatusSideText(pb, sizeof(pb));
+        const uint8_t textW = draw_side_text ? DualVfoU8g2_GetSmallTextWidth(pb) : 0u;
+
+        const char   *rxLab = DualVfoRxModeShortLabel();
+        const uint8_t rxW   = DualVfoU8g2_GetSmallTextWidth(rxLab);
+
+        /* Layout from right edge: [battery] gap [percentage] gap [A/B] */
+        const unsigned batX = LCD_WIDTH - batW;
+        unsigned clearStart = batX;
+
+        uint8_t pctX = 0;
+        if (draw_side_text)
         {
-            uint8_t pctPx;
-            if (draw_side_text) {
-                const uint8_t textW = DualVfoU8g2_GetSmallTextWidth(pb);
-                if (batW >= textW)
-                    pctPx = (uint8_t)(batX + (batW - textW) / 2u);
-                else
-                    pctPx = (uint8_t)batX;
-                if ((uint32_t)pctPx + textW > LCD_WIDTH)
-                    pctPx = (uint8_t)(LCD_WIDTH - textW);
-                if ((uint32_t)pctPx + textW + DV_BAT_PCT_SHIFT_R <= LCD_WIDTH)
-                    pctPx = (uint8_t)(pctPx + DV_BAT_PCT_SHIFT_R);
-            } else {
-                pctPx = (uint8_t)batX;
-            }
-
-            const uint8_t gapRx = 2u;
-            const char   *rxLab = DualVfoRxModeShortLabel();
-            const uint8_t rxW   = DualVfoU8g2_GetSmallTextWidth(rxLab);
-            const int32_t rxX = (int32_t)batX - (int32_t)gapRx - (int32_t)rxW + (int32_t)DV_BAT_MODE_SHIFT_R;
-            const bool    drawRx =
-                (rxX >= (int32_t)(DUAL_VFO_FREQ_COL + 1u) && (uint32_t)rxX + (uint32_t)rxW <= (uint32_t)batX);
-
-            /* 旁路字（电压/百分比）保持原位置；无旁路字时仍以电池区为右边界排布 Rx 模式字 */
-            int32_t       rx_draw_x = rxX;
-            const uint8_t pct_draw_x = pctPx;
-
-            if (drawRx)
-            {
-                const int32_t gap_i  = (int32_t)DV_BAT_MODE_PCT_HGAP_PX;
-                const int32_t rw_i   = (int32_t)rxW;
-                const int32_t min_rx = (int32_t)(DUAL_VFO_FREQ_COL + 1u);
-                const int32_t pct_left_edge = (int32_t)pctPx;
-                const int32_t max_rx_for_gap = pct_left_edge - gap_i - rw_i;
-
-                if (rx_draw_x > max_rx_for_gap)
-                    rx_draw_x = max_rx_for_gap;
-                if (rx_draw_x < min_rx)
-                    rx_draw_x = min_rx;
-            }
-
-            unsigned clearFrom = (unsigned)pct_draw_x;
-            if (drawRx && (unsigned)rx_draw_x < clearFrom)
-                clearFrom = (unsigned)rx_draw_x;
-            for (unsigned c = clearFrom; c < LCD_WIDTH; c++)
-            {
-                rowFb[c] = 0;
-                rowFbNext[c] = 0;
-            }
-            memcpy(rowFb + batX, bat, batW);
-            if (drawRx)
-                DualVfoU8g2_DrawSmallText(rxLab, (uint8_t)rx_draw_x, DV_Y_RXMODE, true);
-            if (draw_side_text)
-                DualVfoU8g2_DrawSmallText(pb, pct_draw_x, DV_Y_PCT, true);
-            const uint8_t smeter_text_right_x =
-                (uint8_t)(DV_SMETER_SREAD_X + DualVfoU8g2_GetSmallTextWidth("+5dB"));
-            uint8_t status_left_limit_x = (uint8_t)(DUAL_VFO_FREQ_COL + 1u);
-            const uint8_t smeter_safe_left_x = (uint8_t)(smeter_text_right_x + 2u);
-            if (smeter_safe_left_x > status_left_limit_x)
-            {
-                status_left_limit_x = smeter_safe_left_x;
-            }
-            uint8_t status_right_limit_x = (uint8_t)(batX - 2u);
-            {
-                uint8_t right_reserved_left_x = pct_draw_x;
-                if (drawRx && rx_draw_x >= 0)
-                {
-                    const uint8_t rx_draw_x_u8 = (uint8_t)rx_draw_x;
-                    if (rx_draw_x_u8 < right_reserved_left_x)
-                    {
-                        right_reserved_left_x = rx_draw_x_u8;
-                    }
-                }
-
-                if (right_reserved_left_x > 2u)
-                {
-                    const uint8_t right_safe_x = (uint8_t)(right_reserved_left_x - 2u);
-                    if (right_safe_x < status_right_limit_x)
-                    {
-                        status_right_limit_x = right_safe_x;
-                    }
-                }
-            }
-
-            DualVfoDrawBottomStatusBar(status_left_limit_x, status_right_limit_x);
+            pctX = (uint8_t)(batX - gap - textW);
+            if ((unsigned)pctX < DUAL_VFO_FREQ_COL) pctX = (uint8_t)DUAL_VFO_FREQ_COL;
+            clearStart = (unsigned)pctX;
         }
+
+        uint8_t modeX = 0;
+        bool drawMode = false;
+        {
+            const unsigned modeXraw = (draw_side_text ? (unsigned)pctX : (unsigned)batX) - gap - (unsigned)rxW;
+            if (modeXraw > (unsigned)DUAL_VFO_FREQ_COL)
+            {
+                modeX = (uint8_t)modeXraw;
+                drawMode = true;
+                clearStart = (unsigned)modeX;
+            }
+        }
+
+        for (unsigned c = clearStart; c < LCD_WIDTH; c++)
+        {
+            rowFbNext[c] = 0;
+        }
+
+        UI_DrawBattery(bat, gBatteryDisplayLevel, gLowBatteryBlink);
+        /* Copy battery icon to row 7 (rowFbNext) so it aligns with percentage text at DV_Y_PCT */
+        memcpy(rowFbNext + batX, bat, batW);
+
+        if (draw_side_text)
+            DualVfoU8g2_DrawSmallText(pb, pctX, DV_Y_PCT, true);
+        if (drawMode)
+            DualVfoU8g2_DrawSmallText(rxLab, modeX, DV_Y_RXMODE, true);
     }
 }
 
+
+
+
+
+static void DualVfoDrawBottomDetailRow(unsigned int vfoIdx)
+{
+    const VFO_Info_t *bv = &gEeprom.VfoInfo[vfoIdx];
+    char              buf[48];
+    unsigned int      pos = 0;
+    buf[0] = '\0';
+
+    {
+        unsigned          d = (unsigned)bv->TX_OFFSET_FREQUENCY_DIRECTION % 3u;
+        if (d != TX_OFFSET_FREQUENCY_DIRECTION_OFF)
+        {
+            char             num[16];
+            const uint32_t   o = bv->TX_OFFSET_FREQUENCY;
+            DualVfoFmtTxOffsMHzTrim(num, sizeof(num), o);
+            pos += (unsigned int)sprintf(buf + pos, "%s %s", gSubMenu_SFT_D[d], num);
+        }
+    }
+    if (pos > 0)
+    {
+        buf[pos] = ' ';
+        pos++;
+        buf[pos] = '\0';
+    }
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'R', &bv->freq_config_RX);
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'T', &bv->freq_config_TX);
+    {
+        const unsigned int lw = (unsigned int)DualVfoU8g2_GetSmallTextWidth(buf);
+        if (lw > 0)
+        {
+            const uint8_t x = (lw < LCD_WIDTH - 4u) ? (uint8_t)(LCD_WIDTH - 2u - lw) : 2u;
+            DualVfoU8g2_DrawSmallText(buf, x, 50u, true);
+        }
+    }
+}
 static bool UI_DisplayMain_DualVfoTwoPanel(void)
 {
     const unsigned int tx  = gEeprom.TX_VFO;
@@ -1039,9 +1006,11 @@ static bool UI_DisplayMain_DualVfoTwoPanel(void)
         s_DualVfoAbBlinkShowAb = true;
     }
 
+    DualVfoUpdateLastSpeaker();
     DualVfoDrawTopChannel(tx);
     DualVfoDrawBottomChannel(oth);
     DualVfoDrawBottomSMeterAndBattery();
+    DualVfoDrawBottomDetailRow(oth);
 
     RxLine = -1;
     return true;
