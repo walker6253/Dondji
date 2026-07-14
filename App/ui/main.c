@@ -235,7 +235,7 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #define DUAL_VFO_SUB_FREQ_H       12u
 #define DUAL_VFO_SUB_FREQ_CHAR_W  7u
 /* A/B 行下方预留 1 像素再显示信道号 */
-#define DV_Y_TOP_CHID    (DV_Y_TOP_AB + DUAL_VFO_AB_TALL_H + 1u)
+#define DV_Y_TOP_CHID    DV_Y_TOP_AB
 /* Tx 偏提示：仅主信道；副信道不显示 */
 #define DV_TXOFS_GAP_L_MAIN 16u
 
@@ -379,8 +379,8 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
 
     const uint8_t innerL = 1u;
     const uint8_t innerR = (uint8_t)(innerL + abW - 1u);
-    const uint8_t rxX = (uint8_t)(4u + abW + 1u + 2u);
-    const uint8_t txX = (uint8_t)(innerR + 2u + 2u);
+    const uint8_t rxX = (uint8_t)(4u + abW + 1u + 3u);
+    const uint8_t txX = (uint8_t)(innerR + 2u + 3u);
 
     const bool    showAb = (!rxHere) || s_DualVfoAbBlinkShowAb;
     const uint8_t yTopC  = (y >= 1u) ? (uint8_t)(y - 1u) : 0u;
@@ -422,7 +422,7 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
 
     if (s_dual_vfo_has_rx_channel_history && s_dual_vfo_last_speaking_channel == vfoIdx)
     {
-        DualVfoU8g2_DrawSmallText("<", (uint8_t)(innerR + 2u), labelY, true);
+        DualVfoU8g2_DrawSmallText("<", (uint8_t)(innerR + 3u), labelY, true);
     }
 
     if (rxHere)
@@ -610,7 +610,10 @@ static void DualVfoDrawTopChannel(unsigned int vfoIdx)
     DualVfoDrawAbRxTxOnlyPx(vfoIdx, DV_Y_TOP_AB, activeTxVFO, true, true, DUAL_VFO_AB_TALL_W,
                             DUAL_VFO_AB_TALL_H, DV_Y_TOP_AB);
     /* A/B 下 1px 间隔后左侧显示信道号 */
-    DualVfoDrawChIdSmallest(vfoIdx, 2, DV_Y_TOP_CHID);
+    if (!FUNCTION_IsRx() && gCurrentFunction != FUNCTION_TRANSMIT)
+        DualVfoDrawChIdSmallest(vfoIdx, 15u, DV_Y_TOP_CHID);
+    if (gDualWatchActive)
+        DualVfoU8g2_DrawSmallText("DWR", 2u, DV_Y_TOP_DET, true);
 
     {
         const bool rxHere =
@@ -694,7 +697,7 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
             char            chId[14];
             const uint8_t besideX0 = (uint8_t)(1u + DUAL_VFO_AB_BOT_W + 5u); /* innerR + 1 + 5px 间隔，为箭头预留 */
             if (rxHere)
-                DualVfoU8g2_DrawSmallText("RX", besideX0, DV_Y_BOT_BESIDE_AB, true);
+                DualVfoU8g2_DrawSmallText("RX", (uint8_t)(besideX0 + 1u), DV_Y_BOT_BESIDE_AB, true);
             else
             {
                 DualVfoFmtChId(vfoIdx, chId, sizeof(chId));
