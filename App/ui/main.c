@@ -213,7 +213,7 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #define DV_Y_BOT_BESIDE_AB  (DV_Y_BOT_MAIN + 2u) /* 框旁信道号、RX、TX 字下移 2px */
 #define DV_Y_BOT_FREQ_LINE  ((DV_Y_BOT_MAIN + DUAL_VFO_AB_BOT_H + 1u) - 9u) /* 相对 -10 参考：下移 1px（整串含末两位） */
 /* 底栏：S 表在左；右为电池 8px + 其下居中百分比；DV_Y_METER 对齐电池页顶 */
-#define DV_Y_METER          52u /* 电池图标（及底栏）下移 2px */
+#define DV_Y_METER          51u /* 电池图标（及底栏）下移 2px */
 #define DV_BAT_ICON_H       8u
 #define DV_Y_PCT            57u /* 百分比下移 1px */
 #define DV_Y_RXMODE         57u            /* 右下角 A/B 模式上移 4px */
