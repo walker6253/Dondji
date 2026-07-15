@@ -358,6 +358,7 @@ static void DualVfoDrawAb1pxBlackMargins(uint8_t y, uint8_t xL, uint8_t xR)
 static uint16_t s_DualVfoAbBlinkPhase;
 static bool     s_DualVfoAbBlinkShowAb = true;
 static bool     s_DualVfoAbBlinkPrevRx;
+static uint8_t  s_MainOnlyBlinkCtr = 0;
 static unsigned s_DualVfoAbBlinkPrevRxVfo;
 
 /* 内区 innerL..innerR 为 abW×abH。主：黑底+镂空 A/B（固定 DUAL_VFO_AB_TALL_*）；副：空心框+最小字 A/B 框内居中（BOT_*）。
@@ -2459,19 +2460,23 @@ void UI_DisplayMain(void)
         for (unsigned int i = 0; i < LCD_WIDTH; i++)
             gFrameBuffer[0][i] |= 0x01;
 
-        const bool hollowBar = FUNCTION_IsRx();
+        const bool isRx = FUNCTION_IsRx();
+        // RX 时闪烁：根据计时器切换实心/空心
+        // RX 闪烁：每 2 帧切换，与双守 A/B 同频
+        if (isRx) s_MainOnlyBlinkCtr = (uint8_t)(s_MainOnlyBlinkCtr + 1u);
+        const bool blinkSolid = isRx && ((s_MainOnlyBlinkCtr >> 1u) & 1u) == 0u;
         const int barX0 = 0, barX1 = 7, rectX0 = 7, rectY0 = 2, rectY1 = 33;
         const int contentX = rectX0 + 4;
 
         for (int y = rectY0; y <= rectY1; y++) {
             for (int x = barX0; x < barX1; x++) {
-                if (!hollowBar) {
-                    UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // 非 RX：实心
+                if (!isRx || blinkSolid) {
+                    UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // 实心
                 } else {
                     const bool border =
                         (x == barX0) || (x == barX1 - 1) || (y == rectY0) || (y == rectY1);
                     if (border)
-                        UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // RX：空心边框
+                        UI_DrawPixelBuffer(gFrameBuffer, x, y, true);   // 空心边框
                 }
             }
         }
