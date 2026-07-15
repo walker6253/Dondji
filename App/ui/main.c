@@ -1460,17 +1460,20 @@ void UI_DisplayAudioScope(void)
         else
 #endif
         {
-            uint8_t *p_line;
+            const uint8_t strip_top    = 40u;
+            const uint8_t strip_bottom = 46u;
 
-            p_line = gFrameBuffer[line];
-            memset(p_line + 24u, 0, LCD_WIDTH - 24u);
+            DualVfoClearRectPx(24u, strip_top, (uint8_t)(LCD_WIDTH - 1u), strip_bottom);
 
             for (col_idx = 8u; col_idx < SCOPE_SAMPLES; col_idx++) {
-                uint8_t        idx;
-                uint16_t       sample_above_floor;
-                uint8_t        height;
-                uint8_t        mask;
-                uint8_t       *p_col;
+                uint8_t  idx;
+                uint16_t sample_above_floor;
+                uint8_t  height;
+                uint8_t  x0;
+                uint8_t  x1;
+                uint8_t  mid_y;
+                uint8_t  y_top_px;
+                uint8_t  yy;
 
                 idx = (uint8_t)((g_scope_write + col_idx) % SCOPE_SAMPLES);
 
@@ -1484,18 +1487,30 @@ void UI_DisplayAudioScope(void)
                     height = (uint8_t)(((uint32_t)sample_above_floor * 7u) / (uint32_t)range);
                 }
 
-                if (height > 0u) {
-                    mask = (uint8_t)((0x7Fu << (7u - height)) & 0x7Fu);
-                } else {
-                    mask = 0x40u;
+                if (height > 7u) {
+                    height = 7u;
                 }
 
-                p_col = &p_line[col_idx * 3u];
-                p_col[0] = mask;
-                p_col[1] = mask;
+                x0 = (uint8_t)(col_idx * 3u);
+                x1 = (uint8_t)(x0 + 1u);
+
+                if (height == 0u) {
+                    mid_y = (uint8_t)(strip_top + 3u);
+                    PutPixel(x0, mid_y, true);
+                    PutPixel(x1, mid_y, true);
+                } else {
+                    y_top_px = (uint8_t)((unsigned)strip_bottom + 1u - (unsigned)height);
+                    if (y_top_px < strip_top) {
+                        y_top_px = strip_top;
+                    }
+                    for (yy = y_top_px; yy <= strip_bottom; yy++) {
+                        PutPixel(x0, yy, true);
+                        PutPixel(x1, yy, true);
+                    }
+                }
             }
 
-            ST7565_BlitLine((uint8_t)line);
+            ST7565_BlitLine(5u);
         }
     }
 }
