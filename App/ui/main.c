@@ -424,7 +424,8 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
 
     if (s_dual_vfo_has_rx_channel_history && s_dual_vfo_last_speaking_channel == vfoIdx)
     {
-        DualVfoU8g2_DrawSmallText("<", (uint8_t)(innerR + 3u), labelY, true);
+        const uint8_t arrowX = rxBesideAb ? (uint8_t)(innerR + 3u) : (uint8_t)(innerR + 2u);
+        DualVfoU8g2_DrawSmallText("<", arrowX, labelY, true);
     }
 
     if (rxHere)
