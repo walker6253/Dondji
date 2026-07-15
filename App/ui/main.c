@@ -1289,7 +1289,7 @@ void UI_DisplayAudioScope(void)
         return;
     }
 
-    if (gCurrentFunction != FUNCTION_TRANSMIT) {
+    if (gCurrentFunction != FUNCTION_TRANSMIT && !FUNCTION_IsRx()) {
         s_was_tx = false;
         return;
     }
@@ -1303,16 +1303,14 @@ void UI_DisplayAudioScope(void)
         }
     }
 
-    if (!GPIO_IsPttPressed()
+    if (gCurrentFunction == FUNCTION_TRANSMIT && !GPIO_IsPttPressed()
 #ifdef ENABLE_VOX
         && !gEeprom.VOX_SWITCH
 #endif
 #ifdef ENABLE_FEAT_F4HWN
         && !gSetting_set_ptt_session
 #endif
-        ) {
-        return;
-    }
+        ) return;
 
     if (!s_was_tx) {
         for (init_idx = 0u; init_idx < SCOPE_SAMPLES; init_idx++) {
@@ -1325,7 +1323,10 @@ void UI_DisplayAudioScope(void)
     }
 
     if (g_scope_ready >= 7u) {
-        g_scope_buf[g_scope_write] = BK4819_GetVoiceAmplitudeOut();
+        if (gCurrentFunction == FUNCTION_TRANSMIT)
+            g_scope_buf[g_scope_write] = BK4819_GetVoiceAmplitudeOut();
+        else
+            g_scope_buf[g_scope_write] = (63u - (uint16_t)BK4819_GetAfTxRx()) * 64u;
     } else {
         g_scope_ready++;
     }

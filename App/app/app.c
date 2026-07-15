@@ -1417,8 +1417,8 @@ void APP_TimeSlice10ms(void)
 #endif
 
     if (gSetting_mic_bar_display != MIC_BAR_DISPLAY_OFF &&
-        gCurrentFunction == FUNCTION_TRANSMIT &&
-        activeMicBarUserTransmit)
+        (gCurrentFunction == FUNCTION_TRANSMIT && activeMicBarUserTransmit) ||
+        FUNCTION_IsRx())
     {
         /* 条形：与改动前一致，约 150ms 刷新（FlashLightBlinkCounter 每 10ms +1 → %15）。
            弹窗：约 20ms 刷新波形，沿用现有逻辑。 */

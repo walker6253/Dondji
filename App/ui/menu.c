@@ -3138,6 +3138,7 @@ void UI_DisplayMenu(void)
                 already_printed = true;
                 break;
             }
+#if 0
             if (page == 4u)
             {
                 const char *url_title = SUBV("web:", "\xe5\x88\xb7\xe6\x9c\xba\xe5\x86\x99\xe9\xa2\x91\xe7\xbd\x91\xe5\x9d\x80\xef\xbc\x9a");
@@ -3178,6 +3179,7 @@ void UI_DisplayMenu(void)
                 already_printed = true;
                 break;
             }
+#endif
 #ifdef ENABLE_FEAT_F4HWN_QRCODE
             if (page == 5u)
             {
