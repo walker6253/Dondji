@@ -1356,9 +1356,11 @@ void UI_DisplayAudioScope(void)
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN
-    RxBlinkLed = 0;
-    RxBlinkLedCounter = 0;
-    BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+    if (gCurrentFunction == FUNCTION_TRANSMIT) {
+        RxBlinkLed = 0;
+        RxBlinkLedCounter = 0;
+        BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+    }
 #endif
 
     {
