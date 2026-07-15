@@ -728,7 +728,7 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 
         case MENU_VOL:
 #ifdef ENABLE_FEAT_F4HWN
-            *pMax = 6;
+            *pMax = 4;
 #else
             *pMax = 0;
 #endif

@@ -3138,70 +3138,8 @@ void UI_DisplayMenu(void)
                 already_printed = true;
                 break;
             }
-#if 0
-            if (page == 4u)
-            {
-                const char *url_title = SUBV("web:", "\xe5\x88\xb7\xe6\x9c\xba\xe5\x86\x99\xe9\xa2\x91\xe7\xbd\x91\xe5\x9d\x80\xef\xbc\x9a");
-                const char *url_line1 = "https://ethanyan6";
-                const char *url_line2 = ".github.io/Dondji/";
-                uint8_t url_x = (uint8_t)menu_value_x1;
-
-                uint8_t url_band_y_top = 0u;
-                uint8_t url_band_y_bot = 0u;
-                if (gIsInSubMenu)
-                {
-                    url_band_y_top = 19u;
-                    url_band_y_bot = 63u;
-                }
-                else
-                {
-                    url_band_y_top = 37u;
-                    url_band_y_bot = 55u;
-                }
-                const unsigned int url_line_h = 8u;
-                const unsigned int url_line_gap = 2u;
-                const unsigned int url_total_h = 3u * url_line_h + 2u * url_line_gap;
-                const unsigned int url_avail_h = (unsigned int)url_band_y_bot - (unsigned int)url_band_y_top + 1u;
-                unsigned int url_start_y = url_band_y_top;
-                if (url_avail_h > url_total_h)
-                {
-                    url_start_y = (unsigned int)url_band_y_top + (url_avail_h - url_total_h) / 2u;
-                }
-                uint8_t url_y1 = (uint8_t)url_start_y;
-                if (url_y1 >= 2u) url_y1 = (uint8_t)(url_y1 - 2u);
-                uint8_t url_y2 = (uint8_t)(url_start_y + url_line_h + url_line_gap);
-                uint8_t url_y3 = (uint8_t)(url_start_y + 2u * (url_line_h + url_line_gap));
-
-                UI_PrintStringSmallAtPixel(url_title, url_x, menu_item_x2, url_y1, (uint8_t)(url_y1 + 7u), 0u);
-                UI_PrintStringSmallAtPixel(url_line1, url_x, menu_item_x2, url_y2, (uint8_t)(url_y2 + 7u), 0u);
-                UI_PrintStringSmallAtPixel(url_line2, url_x, menu_item_x2, url_y3, (uint8_t)(url_y3 + 7u), 0u);
-
-                already_printed = true;
-                break;
-            }
-#endif
-#ifdef ENABLE_FEAT_F4HWN_QRCODE
-            if (page == 5u)
-            {
-                uint8_t qr_y = 0u;
-
-                if (gIsInSubMenu)
-                {
-                    qr_y = 28u;
-                }
-                else
-                {
-                    qr_y = 28u;
-                }
-
-                UI_DrawQRCode(72, qr_y);
-
-                already_printed = true;
-                break;
-            }
-#endif
 #ifdef ENABLE_FEAT_F4HWN
-            if (page == 6u)
+            if (page == 4u)
             {
                 const uint8_t info_label_up_offset_pixels = 5u;
                 const uint8_t info_label_safe_top_pixels_in_submenu = 20u;

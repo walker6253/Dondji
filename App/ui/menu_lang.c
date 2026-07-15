@@ -160,7 +160,7 @@ const char *UI_MENU_GetMenuTitle(const t_menu_item *item)
     case MENU_SPECTRUM_MODE: return "\xe9\xa2\x91\xe8\xb0\xb1\xe6\x98\xbe\xe7\xa4\xba";
 #endif
 #ifdef ENABLE_AUDIO_BAR
-    case MENU_MIC_BAR:      return "\xe5\x8f\x91\xe5\xb0\x84\xe6\x8f\x90\xe7\xa4\xba"; /* 发射提示 */
+    case MENU_MIC_BAR:      return "\xe6\x94\xb6\xe5\x8f\x91\xe6\x8f\x90\xe7\xa4\xba"; /* 收发提示 */
 #endif
     default:
         return item->name;

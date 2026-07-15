@@ -1441,7 +1441,7 @@ void UI_DisplayAudioScope(void)
                 x1 = (uint8_t)(x0 + 1u);
 
                 if (height == 0u) {
-                    mid_y = (uint8_t)(strip_top + 3u);
+                    mid_y = strip_bottom;
                     PutPixel(x0, mid_y, true);
                     PutPixel(x1, mid_y, true);
                 } else {
@@ -1496,7 +1496,7 @@ void UI_DisplayAudioScope(void)
                 x1 = (uint8_t)(x0 + 1u);
 
                 if (height == 0u) {
-                    mid_y = (uint8_t)(strip_top + 3u);
+                    mid_y = strip_bottom;
                     PutPixel(x0, mid_y, true);
                     PutPixel(x1, mid_y, true);
                 } else {
