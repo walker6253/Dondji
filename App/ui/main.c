@@ -1206,7 +1206,7 @@ void UI_DisplayAudioBar(void)
             barsOld = (barsOld - bars > 1) ? (barsOld - 1) : bars;
 
             p_line = gFrameBuffer[line];
-            memset(p_line, 0, LCD_WIDTH);
+            memset(p_line + 24u, 0, LCD_WIDTH - 24u);
 
             DrawLevelBar(2, (uint8_t)line, barsOld, 25);
         }
@@ -1253,7 +1253,7 @@ void UI_DisplayAudioBar(void)
             barsOld = (barsOld - bars > 1) ? (barsOld - 1) : bars;
 
             p_line = gFrameBuffer[line];
-            memset(p_line, 0, LCD_WIDTH);
+            memset(p_line + 24u, 0, LCD_WIDTH - 24u);
 
             DrawLevelBar(2, (uint8_t)line, barsOld, 25);
         }
@@ -1463,7 +1463,7 @@ void UI_DisplayAudioScope(void)
             uint8_t *p_line;
 
             p_line = gFrameBuffer[line];
-            memset(p_line, 0, LCD_WIDTH);
+            memset(p_line + 24u, 0, LCD_WIDTH - 24u);
 
             for (col_idx = 8u; col_idx < SCOPE_SAMPLES; col_idx++) {
                 uint8_t        idx;
@@ -2486,7 +2486,7 @@ void UI_DisplayMain(void)
                 }
                 gUpdateStatus = true;
             } else if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
-                sprintf(String, "%04u", gEeprom.ScreenChannel[vfo] + 1);
+                sprintf(String, "%u", gEeprom.ScreenChannel[vfo] + 1);
                 const uint8_t chNumW = DualVfoU8g2_GetSmallTextWidth(String);
                 const int right_aligned_x = (rightEdge - (int)chNumW) > (int)contentX ? (rightEdge - (int)chNumW) : (int)contentX;
                 int shifted_x = right_aligned_x - 2;
@@ -2502,6 +2502,31 @@ void UI_DisplayMain(void)
         {
             uint32_t f = (gCurrentFunction == FUNCTION_TRANSMIT) ? pVfo->pTX->Frequency : pVfo->pRX->Frequency;
             DualVfoU8g2_DrawMainFreqStrip(f, contentX, 30);
+        }
+        {
+            if (FUNCTION_IsRx())
+            {
+                int16_t rssi = BK4819_GetRSSI_dBm()
+                    + dBmCorrTable[(gRxVfo->Band < BAND_N_ELEM) ? gRxVfo->Band : BAND6_400MHz];
+#ifdef ENABLE_AM_FIX
+                if (gSetting_AM_fix && gRxVfo->Modulation == MODULATION_AM)
+                    rssi = (int16_t)(rssi + AM_fix_get_gain_diff());
+#endif
+                uint8_t lv = DualVfoConvertRssiToUvSLevel(rssi);
+                DualVfoDrawSmeterXbm(82u, 21u);
+                DualVfoDrawSmeterBoxesUv(lv, 82u, 21u);
+                char s9b[8] = "";
+                if (lv >= 1u && lv <= 9u)
+                    sprintf(s9b, "S%u", (unsigned)lv);
+                else if (lv == 10u)
+                {
+                    strcpy(s9b, "S9");
+                }
+                if (s9b[0] != 0)
+                {
+                    DualVfoU8g2_DrawSmallText(s9b, 118u, 23u, true);
+                }
+            }
         }
 
         if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo])) {
@@ -2525,48 +2550,50 @@ void UI_DisplayMain(void)
         // 方框下两行：第一行 time: 计时，第二行 亚音，均右对齐；整体上移 1px
         const int line1Y = 33, line2Y = 39;
 #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+        if (FUNCTION_IsRx() || gCurrentFunction == FUNCTION_TRANSMIT)
         {
             uint16_t t = (FUNCTION_IsRx()) ? (3600 - gRxTimerCountdown_500ms / 2) : (gTxTimerCountdown_500ms / 2);
             uint16_t m = t / 60;
             uint8_t s = (uint8_t)(t % 60);
-            sprintf(String, "time: %02u:%02u", (unsigned)m, s);
-            const int w1 = (int)DualVfoU8g2_GetSmallTextWidth(String);
-            const int x1 = 127 - w1;
-            DualVfoU8g2_DrawSmallText(String, (uint8_t)(x1 > 0 ? x1 : 0), (uint8_t)(line1Y + 2), true);
+            sprintf(String, "%02u:%02u", (unsigned)m, s);
+            DualVfoU8g2_DrawSmallText(String, 0u, (uint8_t)(line2Y + 2u), true);
         }
 #endif
         {
             char toneBuf[48];
             uint8_t pos = 0;
+            {
+                unsigned d = (unsigned)pVfo->TX_OFFSET_FREQUENCY_DIRECTION % 3u;
+                if (d != TX_OFFSET_FREQUENCY_DIRECTION_OFF)
+                {
+                    char num[16];
+                    DualVfoFmtTxOffsMHzTrim(num, sizeof(num), pVfo->TX_OFFSET_FREQUENCY);
+                    pos += (unsigned int)sprintf(toneBuf + pos, "%s %s ", gSubMenu_SFT_D[d], num);
+                }
+            }
             const FREQ_Config_t *pRx = &pVfo->freq_config_RX;
             const FREQ_Config_t *pTx = &pVfo->freq_config_TX;
             if (pRx->CodeType != CODE_TYPE_OFF) {
-                if (pRx->CodeType == CODE_TYPE_CONTINUOUS_TONE) {
-                    pos += sprintf(
-                        toneBuf + pos,
-                        "RCT: %u.%u",
+                if (pRx->CodeType == CODE_TYPE_CONTINUOUS_TONE)
+                    pos += sprintf(toneBuf + pos, "R%u.%u",
                         (unsigned)(CTCSS_Options[pRx->Code] / 10),
                         (unsigned)(CTCSS_Options[pRx->Code] % 10));
-                } else if (pRx->CodeType == CODE_TYPE_DIGITAL) {
-                    pos += sprintf(toneBuf + pos, "R: DCS%03oN", (unsigned)DCS_Options[pRx->Code]);
-                } else {
-                    pos += sprintf(toneBuf + pos, "R: DCS%03oI", (unsigned)DCS_Options[pRx->Code]);
-                }
+                else if (pRx->CodeType == CODE_TYPE_DIGITAL)
+                    pos += sprintf(toneBuf + pos, "R%03o", (unsigned)DCS_Options[pRx->Code]);
+                else
+                    pos += sprintf(toneBuf + pos, "R%03oI", (unsigned)DCS_Options[pRx->Code]);
                 if (pTx->CodeType != CODE_TYPE_OFF)
                     toneBuf[pos++] = ' ';
             }
             if (pTx->CodeType != CODE_TYPE_OFF) {
-                if (pTx->CodeType == CODE_TYPE_CONTINUOUS_TONE) {
-                    pos += sprintf(
-                        toneBuf + pos,
-                        "TCT: %u.%u",
+                if (pTx->CodeType == CODE_TYPE_CONTINUOUS_TONE)
+                    pos += sprintf(toneBuf + pos, "T%u.%u",
                         (unsigned)(CTCSS_Options[pTx->Code] / 10),
                         (unsigned)(CTCSS_Options[pTx->Code] % 10));
-                } else if (pTx->CodeType == CODE_TYPE_DIGITAL) {
-                    pos += sprintf(toneBuf + pos, "T: DCS%03oN", (unsigned)DCS_Options[pTx->Code]);
-                } else {
-                    pos += sprintf(toneBuf + pos, "T: DCS%03oI", (unsigned)DCS_Options[pTx->Code]);
-                }
+                else if (pTx->CodeType == CODE_TYPE_DIGITAL)
+                    pos += sprintf(toneBuf + pos, "T%03o", (unsigned)DCS_Options[pTx->Code]);
+                else
+                    pos += sprintf(toneBuf + pos, "T%03oI", (unsigned)DCS_Options[pTx->Code]);
             }
             toneBuf[pos] = '\0';
             if (pos > 0) {
@@ -2590,7 +2617,7 @@ void UI_DisplayMain(void)
             gFrameBuffer[btnLY][x] = 0xFF;
         gFrameBuffer[btnLY][sepX] = 0x00;
 
-        UI_PrintStringSmallNormalNegative("Menu", btnLX0, btnLX1, btnLY);
+        UI_PrintStringSmallNormalNegative("MENU", btnLX0, btnLX1, btnLY);
         UI_PrintStringSmallNormalNegative(gModulationStr[pVfo->Modulation], btnRX0, btnRX1, btnLY);
 
         // 键盘锁定时，在主页内容之上显示解锁提示框
@@ -2874,7 +2901,7 @@ void UI_DisplayMain(void)
             const unsigned int x = 1;
             const bool inputting = gInputBoxIndex != 0 && gEeprom.TX_VFO == vfo_num;
             if (!inputting || gScanStateDir != SCAN_OFF)
-                sprintf(String, "%04u", gEeprom.ScreenChannel[vfo_num] + 1);
+                sprintf(String, "%u", gEeprom.ScreenChannel[vfo_num] + 1);
             else
                 sprintf(String, "%.4s", INPUTBOX_GetAscii());  // show the input text
 

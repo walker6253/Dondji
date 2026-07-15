@@ -142,11 +142,6 @@ void UI_DisplayMainOnlyStatusBar(void)
     }
     x += 10;
 
-    if (pVfo->freq_config_RX.Frequency == pVfo->freq_config_TX.Frequency) {
-        GUI_DisplaySmallest("|->|", x, 1, true, true);
-        x += 17;
-    }
-    x += 1;
 
     {
         const char *pwr[] = {"L1","L2","L3","L4","L5","M","H"};
@@ -174,28 +169,6 @@ void UI_DisplayMainOnlyStatusBar(void)
         DualVfoU8g2_DrawSmallTextStatus(str, (uint8_t)x, 2u, true);
     }
     x += 7;
-
-    {
-        const uint16_t step_frequency_hz = pVfo->StepFrequency;
-        const uint16_t step_khz_whole = step_frequency_hz / 100u;
-        const uint16_t step_khz_frac = step_frequency_hz % 100u;
-        const unsigned int step_khz_whole_u = (unsigned int)step_khz_whole;
-        const unsigned int step_khz_frac_u = (unsigned int)step_khz_frac;
-
-        if (step_khz_frac == 0u) {
-            sprintf(str, "%uK", step_khz_whole_u);
-        } else {
-            const uint16_t step_frac_tenths = step_khz_frac / 10u;
-            const uint16_t step_frac_ones = step_khz_frac % 10u;
-
-            if (step_frac_ones == 0u) {
-                sprintf(str, "%u.%uK", step_khz_whole_u, (unsigned int)step_frac_tenths);
-            } else {
-                sprintf(str, "%u.%02uK", step_khz_whole_u, step_khz_frac_u);
-            }
-        }
-    }
-    DualVfoU8g2_DrawSmallTextStatus(str, (uint8_t)x, 2u, true);
 
     x = LCD_WIDTH - UI_BATTERY_ICON_WIDTH - 2;
     {
