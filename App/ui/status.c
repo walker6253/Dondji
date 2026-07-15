@@ -170,6 +170,11 @@ void UI_DisplayMainOnlyStatusBar(void)
     }
     x += 7;
 
+    if (pVfo->FrequencyReverse) {
+        DualVfoU8g2_DrawSmallTextStatus("R", (uint8_t)x, 2u, true);
+        x += 7;
+    }
+
     x = LCD_WIDTH - UI_BATTERY_ICON_WIDTH - 2;
     {
         uint8_t battery_bitmap[UI_BATTERY_ICON_WIDTH];

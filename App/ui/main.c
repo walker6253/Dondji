@@ -184,6 +184,7 @@ static void DualVfoHeaderLeft(unsigned int vfoIdx, char *out, size_t outLen)
 static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 {
     const VFO_Info_t *v = &gEeprom.VfoInfo[vfoIdx];
+    const char *rev = v->FrequencyReverse ? "R " : "";
 #ifdef ENABLE_FEAT_F4HWN_NARROWER
     bool narrower = (v->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1);
     const char *bw =
@@ -191,7 +192,7 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #else
     const char *bw = (v->CHANNEL_BANDWIDTH == BANDWIDTH_WIDE) ? "WIDE" : "NAR";
 #endif
-    snprintf(out, outLen, "%s %s %s", gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
+    snprintf(out, outLen, "%s%s %s %s", rev, gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
 }
 
 /* 最小字宽约 4px；S 表左侧清空到该列，与频率区错开 */
@@ -3588,6 +3589,8 @@ void UI_DisplayMain(void)
                 strcpy(String, "MONI");
            } else {
                 sprintf(String, "SQL%d", gEeprom.SQUELCH_LEVEL);
+                if (vfoInfo->FrequencyReverse)
+                    strcat(String, " R");
            }
 
            if (gSetting_set_gui) {
