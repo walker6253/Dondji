@@ -184,7 +184,6 @@ static void DualVfoHeaderLeft(unsigned int vfoIdx, char *out, size_t outLen)
 static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 {
     const VFO_Info_t *v = &gEeprom.VfoInfo[vfoIdx];
-    const char *rev = v->FrequencyReverse ? "R " : "";
 #ifdef ENABLE_FEAT_F4HWN_NARROWER
     bool narrower = (v->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1);
     const char *bw =
@@ -192,7 +191,7 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #else
     const char *bw = (v->CHANNEL_BANDWIDTH == BANDWIDTH_WIDE) ? "WIDE" : "NAR";
 #endif
-    snprintf(out, outLen, "%s%s %s %s", rev, gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
+    snprintf(out, outLen, "%s %s %s", gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
 }
 
 /* 最小字宽约 4px；S 表左侧清空到该列，与频率区错开 */
@@ -2439,21 +2438,6 @@ void UI_DisplayMain(void)
     if (isMainOnly() && !gAirCopyBootMode && gScreenToDisplay == DISPLAY_MAIN) {
         const uint8_t vfo = gEeprom.TX_VFO;
         const VFO_Info_t *pVfo = &gEeprom.VfoInfo[vfo];
-        // TX disable / VFO state check
-        {
-            enum VfoState_t vfoState = VfoState[vfo];
-#ifdef ENABLE_ALARM
-            if (gCurrentFunction == FUNCTION_TRANSMIT && gAlarmState == ALARM_STATE_SITE_ALARM)
-                vfoState = VFO_STATE_ALARM;
-#endif
-            if (vfoState != VFO_STATE_NORMAL)
-            {
-                if (vfoState < ARRAY_SIZE(VfoStateStr))
-                    DualVfoU8g2_DrawSmallText(VfoStateStr[vfoState], 14u, 14u, true);
-                goto main_only_draw_buttons;
-            }
-        }
-
 
         // 顶线 + 左侧小长条（RX 接收时空心，平时实心）+ 方框
         for (unsigned int i = 0; i < LCD_WIDTH; i++)
@@ -2637,8 +2621,7 @@ void UI_DisplayMain(void)
             }
         }
 
-main_only_draw_buttons:
-        // 底部两按钮
+        // 底部两按钮：黑底先增高 1 像素（row5 底一行黑），再 row6 黑底，中间白线，笔画用 Negative 清空（字不动）
         const int btnLY = 6, btnL5 = 5, btnLX0 = 0, btnLX1 = 62, btnRX0 = 64, btnRX1 = 127;
         const int sepX = 63;
         for (int x = btnLX0; x <= btnLX1; x++)
@@ -3605,8 +3588,6 @@ main_only_draw_buttons:
                 strcpy(String, "MONI");
            } else {
                 sprintf(String, "SQL%d", gEeprom.SQUELCH_LEVEL);
-                if (vfoInfo->FrequencyReverse)
-                    strcat(String, " R");
            }
 
            if (gSetting_set_gui) {
