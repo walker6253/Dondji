@@ -1051,7 +1051,6 @@ static void UI_MENU_DrawMemNamePinyinEdit(unsigned int sub_val_x1, unsigned int 
 {
     const uint8_t y_mode = 20u;
     const uint8_t y_name = 28u;
-    const uint8_t y_pinyin = (uint8_t)(y_name + 4u);
     const uint8_t y_strip = (uint8_t)(y_name + 22u);
     const size_t max_b = (size_t)CHANNEL_NAME_MAX_BYTES;
 
@@ -1070,15 +1069,8 @@ static void UI_MENU_DrawMemNamePinyinEdit(unsigned int sub_val_x1, unsigned int 
             UI_PrintStringSmallAtPixel(",", (uint8_t)(sub_val_x2 - 6), (uint8_t)sub_val_x2, y_mode, (uint8_t)(y_mode + 7u), 0u);
             break;
         default:
-            if (gPinyinLen > 0 && gCNCandidateCount == 0)
-            {
-                if (gUiLanguage == UI_LANGUAGE_CN)
-                    UI_PrintStringSmallAtPixel("\xe9\x80\x89\xe6\x8b\xa9", (uint8_t)(sub_val_x2 - 24), (uint8_t)sub_val_x2, y_mode, (uint8_t)(y_mode + 11u), 0u);
-                else
-                    UI_PrintStringSmallAtPixel("Sel.", (uint8_t)(sub_val_x2 - 18), (uint8_t)sub_val_x2, y_mode, (uint8_t)(y_mode + 7u), 0u);
-            }
-            else
-                UI_PrintStringSmallAtPixel("PY", (uint8_t)(sub_val_x2 - 12), (uint8_t)sub_val_x2, y_mode, (uint8_t)(y_mode + 7u), 0u);
+            // Show "PY" mode indicator, no longer showing pinyin at right side
+            UI_PrintStringSmallAtPixel("PY", (uint8_t)(sub_val_x2 - 12), (uint8_t)sub_val_x2, y_mode, (uint8_t)(y_mode + 7u), 0u);
             break;
     }
 
@@ -1195,17 +1187,42 @@ static void UI_MENU_DrawMemNamePinyinEdit(unsigned int sub_val_x1, unsigned int 
         }
     }
 
-    if (gPinyinLen > 0)
+    // Display digit sequence at right side of channel name (pinyin input mode)
+    if (gMemNameInputMode == MEM_NAME_INPUT_PINYIN && gPinyinDigitLen > 0)
     {
-        char pinyin_display[PINYIN_MAX_LEN + 2];
-        memcpy(pinyin_display, gPinyinBuffer, gPinyinLen);
-        pinyin_display[gPinyinLen] = '_';
-        pinyin_display[gPinyinLen + 1] = 0;
-        UI_PrintStringSmallAtPixel(pinyin_display, (uint8_t)(sub_val_x2 - (gPinyinLen + 1) * 6u), (uint8_t)sub_val_x2, y_pinyin,
-                                     (uint8_t)(y_pinyin + 7u), 0u);
+        // Show pressed digit keys at right side (moved left 3 pixels)
+        char digits[7];
+        uint8_t i;
+        for (i = 0; i < gPinyinDigitLen && i < 6; i++)
+        {
+            digits[i] = gPinyinDigitSeq[i];
+        }
+        digits[i] = 0;
+        UI_PrintStringSmallAtPixel(digits, (uint8_t)(sub_val_x2 - 33), (uint8_t)(sub_val_x2 - 3), y_name, (uint8_t)(y_name + 11u), 0u);
     }
 
-    if (gCNCandidateCount > 0)
+    // Display pinyin candidates with 6-pixel gap between each
+    if (gMemNameInputMode == MEM_NAME_INPUT_PINYIN && gPinyinCandidateCount > 0)
+    {
+        uint8_t x = (uint8_t)sub_val_x1;
+        uint8_t i;
+
+        MENU_EnsurePinyinPageVisible();
+        for (i = gPinyinCandidateOffset; i < gPinyinCandidateCount; i++)
+        {
+            uint8_t py_w = (uint8_t)strlen(gPinyinCandidates[i]) * 6u;
+            if (x + py_w > sub_val_x2) break;
+
+            if (i == gPinyinCandidateIndex) {
+                uint8_t inv_x1 = (x >= 2u) ? (uint8_t)(x - 2u) : 0u;
+                uint8_t inv_x2 = (uint8_t)(x + py_w + 2u);
+                UI_PrintStringSmallAtPixelCnInverse(gPinyinCandidates[i], inv_x1, inv_x2, (uint8_t)(y_strip - 10u), (uint8_t)(y_strip + 1u));
+            } else
+                UI_PrintStringSmallAtPixel(gPinyinCandidates[i], x, (uint8_t)(x + py_w), y_strip, (uint8_t)(y_strip + 11u), 0u);
+            x += py_w + 6u;
+        }
+    }
+    else if (gCNCandidateCount > 0)
     {
         const unsigned strip_w = (unsigned)(sub_val_x2 - sub_val_x1);
         const unsigned slot_w = strip_w / 6u;
@@ -1257,31 +1274,7 @@ static void UI_MENU_DrawMemNamePinyinEdit(unsigned int sub_val_x1, unsigned int 
 
     if (edit_index < (int)CHANNEL_NAME_MAX_BYTES)
     {
-        if (gMemNameInputMode == MEM_NAME_INPUT_PINYIN)
-        {
-            const bool cn = (gUiLanguage == UI_LANGUAGE_CN);
-            if (gCNCandidateCount == 0 && gMemNameCandidateCount == 0)
-            {
-                const char *hint_py;
-                if (gPinyinLen > 0)
-                {
-                    if (gPinyinLookupNoMatch != 0)
-                        hint_py = cn ? "\xe6\x9c\xaa\xe6\x9f\xa5\xe5\x88\xb0 0\xe5\x88\xa0" : "No match 0 del";
-                    else
-                        hint_py = cn ? "MENU\xe7\xa1\xae\xe8\xae\xa4 0\xe5\x88\xa0" : "MENU OK 0 del";
-                }
-                else
-                    hint_py = cn ? "2-9\xe8\xbe\x93\xe5\x85\xa5 #\xe5\x88\x87\xe6\x8d\xa2\xe6\xa8\xa1\xe5\xbc\x8f" : "2-9 input # mode";
-                UI_PrintStringSmallAtPixel(hint_py, (uint8_t)sub_val_x1, (uint8_t)sub_val_x2, y_strip, (uint8_t)(y_strip + 7u), 0u);
-            }
-        }
-        else if (gPinyinLen == 0 && gCNCandidateCount == 0 && gMemNameCandidateCount == 0 &&
-                 gMemNameInputMode != MEM_NAME_INPUT_SYMBOL)
-        {
-            UI_PrintStringSmallAtPixel((gUiLanguage == UI_LANGUAGE_CN) ? "#\xe5\x88\x87\xe6\x8d\xa2 EXIT\xe5\x9b\x9e\xe9\x80\x80"
-                                                                       : "#switch EXIT back",
-                                       (uint8_t)sub_val_x1, (uint8_t)sub_val_x2, y_strip, (uint8_t)(y_strip + 7u), 0u);
-        }
+        // No hint text for pinyin input - user learns through usage
     }
 }
 #endif /* ENABLE_CHINESE */
@@ -1363,14 +1356,8 @@ static bool UI_MENU_IsToneMenu(const uint8_t menu_id)
 
 static uint8_t UI_MENU_GetToneValueYOffsetPx(const bool is_in_submenu)
 {
-    uint8_t value_y_offset_px = 10u;
-
-    if (is_in_submenu)
-    {
-        value_y_offset_px = 10u;
-    }
-
-    return value_y_offset_px;
+    (void)is_in_submenu;
+    return 10u;
 }
 
 static void UI_MENU_PrintSubmenuValueLine(const char *line,
@@ -3138,8 +3125,28 @@ void UI_DisplayMenu(void)
                 already_printed = true;
                 break;
             }
-#ifdef ENABLE_FEAT_F4HWN
+#ifdef ENABLE_FEAT_F4HWN_QRCODE
             if (page == 4u)
+            {
+                uint8_t qr_y = 0u;
+
+                if (gIsInSubMenu)
+                {
+                    qr_y = 28u;
+                }
+                else
+                {
+                    qr_y = 28u;
+                }
+
+                UI_DrawQRCode(72, qr_y);
+
+                already_printed = true;
+                break;
+            }
+#endif
+#ifdef ENABLE_FEAT_F4HWN
+            if (page == 5u)
             {
                 const uint8_t info_label_up_offset_pixels = 5u;
                 const uint8_t info_label_safe_top_pixels_in_submenu = 20u;

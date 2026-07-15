@@ -1638,8 +1638,6 @@ void APP_TimeSlice500ms(void)
             exit_menu = (gScreenToDisplay == DISPLAY_MENU); // exit menu mode
 
 #ifdef ENABLE_CHINESE
-    if (gPinyinTimeout_500ms > 0)
-        gPinyinTimeout_500ms--;
     if (gScreenToDisplay == DISPLAY_MENU && gIsInSubMenu && edit_index >= 0)
         gUpdateDisplay = true;
 #endif
