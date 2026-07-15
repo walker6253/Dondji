@@ -1271,10 +1271,10 @@ void UI_DisplayAudioBar(void)
 #if defined(ENABLE_FEAT_F4HWN_AUDIO_SCOPE)
 
 #define SCOPE_SAMPLES        43
-#define SCOPE_NOISE_GATE     50u
+#define SCOPE_NOISE_GATE     300u
 #define SCOPE_FLOOR_RISE     2u
 #define SCOPE_FLOOR_DROP_SHR 3u
-#define SCOPE_VOLUME_MIN     200u
+#define SCOPE_VOLUME_MIN     3800u
 
 void UI_DisplayAudioScope(void)
 {
