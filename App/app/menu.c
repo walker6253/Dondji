@@ -829,7 +829,11 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 
         case MENU_VOL:
 #ifdef ENABLE_FEAT_F4HWN
+#ifdef ENABLE_FEAT_F4HWN_QRCODE
             *pMax = 5;
+#else
+            *pMax = 4;
+#endif
 #else
             *pMax = 0;
 #endif

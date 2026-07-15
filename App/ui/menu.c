@@ -3146,7 +3146,13 @@ void UI_DisplayMenu(void)
             }
 #endif
 #ifdef ENABLE_FEAT_F4HWN
-            if (page == 5u)
+            if (page ==
+#ifdef ENABLE_FEAT_F4HWN_QRCODE
+                5u
+#else
+                4u
+#endif
+                )
             {
                 const uint8_t info_label_up_offset_pixels = 5u;
                 const uint8_t info_label_safe_top_pixels_in_submenu = 20u;
