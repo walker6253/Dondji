@@ -26,16 +26,16 @@
 void UI_DrawBattery(uint8_t* bitmap, uint8_t level, uint8_t blink)
 {
     const uint8_t battery_icon_width = UI_BATTERY_ICON_WIDTH;
-    const uint8_t battery_body_left_x = 3u;
-    const uint8_t battery_body_right_x = 13u;
+    const uint8_t battery_body_left_x = 0u;
+    const uint8_t battery_body_right_x = 10u;
     const uint8_t battery_body_top_y = 1u;
     const uint8_t battery_body_bottom_y = 5u;
-    const uint8_t battery_tip_left_x = 1u;
-    const uint8_t battery_tip_right_x = 2u;
+    const uint8_t battery_tip_left_x = 11u;
+    const uint8_t battery_tip_right_x = 12u;
     const uint8_t battery_tip_top_y = 2u;
     const uint8_t battery_tip_bottom_y = 4u;
-    const uint8_t battery_fill_left_x = 4u;
-    const uint8_t battery_fill_right_limit = 12u;
+    const uint8_t battery_fill_left_x = 1u;
+    const uint8_t battery_fill_right_limit = 9u;
     const uint8_t battery_fill_top_y = 2u;
     const uint8_t battery_fill_bottom_y = 4u;
 
