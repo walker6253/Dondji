@@ -2190,38 +2190,14 @@ void DisplayRSSIBar(const bool now)
     {
         if (gSetting_set_gui)
         {
-            if (isMainOnly() && overS9Bars > 0) {
-                unsigned ov = overS9dBm;
-                if (ov > 60) ov = 60;
-                sprintf(str, "+%u %d", ov, rssi_dBm);
-            } else {
+            if (!isMainOnly()) {
                 sprintf(str, "%3d", rssi_dBm);
+                UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
             }
-            {
-                uint8_t *p_line = gFrameBuffer[line - 1];
-                for (uint8_t i = 0; i < 60u; i++)
-                    p_line[LCD_WIDTH - 60u + i] = 0;
-            }
-            UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
         }
         else
         {
-            if (isMainOnly()) {
-                if (overS9Bars > 0) {
-                    unsigned ov = overS9dBm;
-                    if (ov > 60) ov = 60;
-                    sprintf(str, "+%u %d", ov, rssi_dBm);
-                } else {
-                    sprintf(str, "%d", rssi_dBm);
-                }
-                {
-                    const uint8_t w = (uint8_t)(strlen(str) * 4);
-                    for (uint8_t py = 0; py < 6u; py++)
-                        for (uint8_t px = 0; px < 40u; px++)
-                            PutPixel(2u + px, 41u + py, false);
-                }
-                GUI_DisplaySmallest(str, 2, 41, false, true);
-            } else {
+            if (!isMainOnly()) {
                 sprintf(str, "%4d", rssi_dBm);
                 GUI_DisplaySmallest(str, 2, 25, false, true);
             }
