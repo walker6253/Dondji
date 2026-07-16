@@ -900,7 +900,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
                 if (overDb > 60)
                     overDb = 60;
                 sprintf(s_reading, "S9 %d", (int)rssi_dBm);
-                sprintf(dbb, "+%ddB", (int)overDb);
+                sprintf(dbb, "+%d", (int)overDb);
             }
             else
                 sprintf(s_reading, "%d", (int)rssi_dBm);
@@ -2195,11 +2195,19 @@ void DisplayRSSIBar(const bool now)
         }
         else
         {
-            sprintf(str, "%4d", rssi_dBm);
-            if (isMainOnly())
+            if (isMainOnly()) {
+                if (overS9Bars > 0) {
+                    unsigned ov = overS9dBm;
+                    if (ov > 60) ov = 60;
+                    sprintf(str, "+%u %d", ov, rssi_dBm);
+                } else {
+                    sprintf(str, "%d", rssi_dBm);
+                }
                 GUI_DisplaySmallest(str, 2, 41, false, true);
-            else
+            } else {
+                sprintf(str, "%4d", rssi_dBm);
                 GUI_DisplaySmallest(str, 2, 25, false, true);
+            }
         }
 
         if (overS9Bars == 0)
