@@ -2528,11 +2528,22 @@ void UI_DisplayMain(void)
                     + ((gSetting_AM_fix && gRxVfo->Modulation == MODULATION_AM) ? AM_fix_get_gain_diff() : 0)
 #endif
                     + dBmCorrTable[b];
-                rssi_dBm = -rssi_dBm;
-                if (rssi_dBm > 141) rssi_dBm = 141;
-                if (rssi_dBm < 53) rssi_dBm = 53;
-                const int16_t display_rssi_dBm = (int16_t)(-rssi_dBm);
-                sprintf(dBmStr, "%d dBm", display_rssi_dBm);
+                {
+                    uint8_t overS9 = 0;
+                    int16_t neg = -rssi_dBm;
+                    if (neg < 53) neg = 53;
+                    if (neg > 141) neg = 141;
+                    const int16_t display_rssi_dBm = -neg;
+                    if (neg < 93) {
+                        overS9 = (uint8_t)(93 - neg);
+                        if (overS9 > 60) overS9 = 60;
+                    }
+                    if (overS9 > 0)
+                        sprintf(dBmStr, "+%u %d", overS9, display_rssi_dBm);
+                    else
+                        sprintf(dBmStr, "%d", display_rssi_dBm);
+                    rssi_dBm = neg;
+                }
                 const unsigned int w = DualVfoU8g2_GetSmallTextWidth(dBmStr);
                 const int right_aligned_x = (rightEdge - (int)w) > (int)contentX ? (rightEdge - (int)w) : (int)contentX;
                 int shifted_x = right_aligned_x - 2;
