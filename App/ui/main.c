@@ -2195,7 +2195,7 @@ void DisplayRSSIBar(const bool now)
         }
         else
         {
-            sprintf(str, "% 4d %s", rssi_dBm, "dBm");
+            sprintf(str, "%4d", rssi_dBm);
             if (isMainOnly())
                 GUI_DisplaySmallest(str, 2, 41, false, true);
             else
