@@ -2190,7 +2190,13 @@ void DisplayRSSIBar(const bool now)
     {
         if (gSetting_set_gui)
         {
-            sprintf(str, "%3d", rssi_dBm);
+            if (isMainOnly() && overS9Bars > 0) {
+                unsigned ov = overS9dBm;
+                if (ov > 60) ov = 60;
+                sprintf(str, "+%u %d", ov, rssi_dBm);
+            } else {
+                sprintf(str, "%3d", rssi_dBm);
+            }
             UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
         }
         else
