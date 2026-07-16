@@ -874,8 +874,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
         const bool   rxActive = FUNCTION_IsRx();
         int16_t      rssi_dBm = 0;
         uint8_t      s_level  = 0;
-        char         s9b[8]   = "";
-        char         dbb[10]  = "";
+        char         s_reading[16] = "";
 
         if (rxActive)
         {
@@ -888,25 +887,19 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
                 rssi_dBm = (int16_t)(rssi_dBm + AM_fix_get_gain_diff());
 #endif
             s_level = DualVfoConvertRssiToUvSLevel(rssi_dBm);
-            const int16_t s9_dBm = -93;
 
             if (s_level >= 1u && s_level <= 9u)
-                sprintf(s9b, "S%u", (unsigned)s_level);
+                sprintf(s_reading, "S%u %d", (unsigned)s_level, (int)rssi_dBm);
             else if (s_level == 10u)
-            {
-                int32_t overDb = (int32_t)rssi_dBm - (int32_t)s9_dBm;
-                if (overDb < 0)
-                    overDb = 0;
-                strcpy(s9b, "S9");
-                sprintf(dbb, "+%udB", (unsigned)DualVfoMapOverS9ToDisplayStep((unsigned)overDb));
-            }
+                sprintf(s_reading, "S9 %d", (int)rssi_dBm);
+            else
+                sprintf(s_reading, "%d", (int)rssi_dBm);
+
             DualVfoDrawSmeterBoxesUv(s_level, DV_SMETER_BAR_X0, DV_SMETER_LABEL_Y);
         }
 
-        if (s9b[0] != 0)
-            DualVfoU8g2_DrawSmallText(s9b, DV_SMETER_SREAD_X, DV_SMETER_SVALUE_Y, true);
-        if (dbb[0] != 0)
-            DualVfoU8g2_DrawSmallText(dbb, DV_SMETER_SREAD_X, DV_SMETER_DBB_Y, true);
+        if (s_reading[0] != 0)
+            DualVfoU8g2_DrawSmallText(s_reading, DV_SMETER_SREAD_X, DV_SMETER_SVALUE_Y, true);
     }
 
     {
