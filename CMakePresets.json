@@ -73,7 +73,7 @@
                 "ENABLE_UART_RW_BK_REGS": false,
                 "ENABLE_SWD": false,
                 "VERSION_STRING_1": "v5.3.1",
-                "VERSION_STRING_2": "v5.2.0"
+                "VERSION_STRING_2": "v5.2.1"
             }
         },
         {
@@ -190,7 +190,7 @@
                 "ENABLE_FEAT_F4HWN_PMR": true,
                 "ENABLE_FEAT_F4HWN_GMRS_FRS_MURS": true,
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": false,
-                "ENABLE_FEAT_F4HWN_VOL": true,
+                "ENABLE_FEAT_F4HWN_VOL": false,
                 "ENABLE_FEAT_F4HWN_AUDIO": true,
                 "ENABLE_FEAT_F4HWN_AUDIO_SCOPE": true,
                 "EDITION_STRING": "Fusion",

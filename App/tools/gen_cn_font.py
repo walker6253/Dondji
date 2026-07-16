@@ -370,19 +370,174 @@ PINYIN_MAP = {
     '玺': 'xi', '蕲': 'qi', '产': 'chan',
 }
 
+# High-frequency heteronyms for IME lookup (different syllables only).
+# Overrides PINYIN_MAP for these chars; primary reading listed first.
+# Do not dump full dictionary readings — only what users commonly type.
+HIGH_FREQ_HETERONYMS = {
+    # 的/地/得、语气助词
+    '的': 'de,di',
+    '地': 'di,de',
+    '得': 'de,dei',
+    '了': 'le,liao',
+    '着': 'zhe,zhao,zhuo',
+    '还': 'hai,huan',
+    '都': 'dou,du',
+    '呢': 'ne,ni',
+    '哪': 'na,nei',
+    '那': 'na,nei',
+    # 极常见
+    '会': 'hui,kuai',
+    '长': 'chang,zhang',
+    '重': 'zhong,chong',
+    '种': 'zhong,chong',
+    '行': 'xing,hang',
+    '乐': 'le,yue',
+    '没': 'mei,mo',
+    '强': 'qiang,jiang',
+    '传': 'chuan,zhuan',
+    '朝': 'chao,zhao',
+    '差': 'cha,chai',
+    '称': 'cheng,chen',
+    '调': 'diao,tiao',
+    '否': 'fou,pi',
+    '给': 'gei,ji',
+    '合': 'he,ge',
+    '和': 'he,huo,hu',
+    '觉': 'jue,jiao',
+    '落': 'luo,la,lao',
+    '模': 'mo,mu',
+    '切': 'qie,qi',
+    '色': 'se,shai',
+    '省': 'sheng,xing',
+    '盛': 'sheng,cheng',
+    '识': 'shi,zhi',
+    '属': 'shu,zhu',
+    '说': 'shuo,shui',
+    '弹': 'dan,tan',
+    '提': 'ti,di',
+    '系': 'xi,ji',
+    '校': 'xiao,jiao',
+    '血': 'xue,xie',
+    '择': 'ze,zhai',
+    '爪': 'zhua,zhao',
+    '转': 'zhuan,zhuai',
+    '数': 'shu,shuo',
+    '便': 'bian,pian',
+    '藏': 'cang,zang',
+    '曾': 'ceng,zeng',
+    '单': 'dan,shan',
+    '读': 'du,dou',
+    '恶': 'e,wu',
+    '奇': 'qi,ji',
+    '贾': 'jia,gu',
+    '降': 'jiang,xiang',
+    '角': 'jiao,jue',
+    '解': 'jie,xie',
+    '劲': 'jin,jing',
+    '卡': 'ka,qia',
+    '壳': 'ke,qiao',
+    '弄': 'nong,long',
+    '炮': 'pao,bao',
+    '圈': 'quan,juan',
+    '塞': 'sai,se',
+    '厦': 'sha,xia',
+    '折': 'zhe,she',
+    '似': 'si,shi',
+    '宿': 'su,xiu',
+    '吓': 'xia,he',
+    '纤': 'xian,qian',
+    '巷': 'xiang,hang',
+    '削': 'xiao,xue',
+    '臭': 'chou,xiu',
+    '咽': 'yan,ye',
+    '钥': 'yao,yue',
+    '扎': 'zha,za',
+    '仔': 'zi,zai',
+    '著': 'zhu,zhe',
+    # 地名/信道名相关
+    '堡': 'bao,bu,pu',
+    '澄': 'cheng,deng',
+    '尉': 'wei,yu',
+    '蔚': 'wei,yu',
+    '圩': 'wei,xu',
+    '桔': 'jie,ju',
+    '埔': 'pu,bu',
+    # 其余常用异读（音节不同）
+    '薄': 'bao,bo',
+    '臂': 'bi,bei',
+    '辟': 'bi,pi',
+    '扁': 'bian,pian',
+    '剥': 'bao,bo',
+    '参': 'can,shen',
+    '查': 'cha,zha',
+    '禅': 'chan,shan',
+    '车': 'che,ju',
+    '仇': 'chou,qiu',
+    '畜': 'chu,xu',
+    '伺': 'ci,si',
+    '大': 'da,dai',
+    '度': 'du,duo',
+    '囤': 'dun,tun',
+    '红': 'hong,gong',
+    '缉': 'ji,qi',
+    '茄': 'qie,jia',
+    '嚼': 'jiao,jue',
+    '芥': 'jie,gai',
+    '颈': 'jing,geng',
+    '句': 'ju,gou',
+    '溃': 'kui,hui',
+    '烙': 'lao,luo',
+    '勒': 'le,lei',
+    '俩': 'lia,liang',
+    '露': 'lou,lu',
+    '绿': 'lv,lu',
+    '率': 'lv,shuai',
+    '络': 'luo,lao',
+    '埋': 'mai,man',
+    '脉': 'mai,mo',
+    '蔓': 'man,wan',
+    '氓': 'mang,meng',
+    '秘': 'mi,bi',
+    '泌': 'mi,bi',
+    '抹': 'mo,ma',
+    '疟': 'nve,yao',
+    '胖': 'pang,pan',
+    '刨': 'pao,bao',
+    '曝': 'pu,bao',
+    '乾': 'qian,gan',
+    '雀': 'que,qiao',
+    '石': 'shi,dan',
+    '术': 'shu,zhu',
+    '衰': 'shuai,cui',
+    '缩': 'suo,su',
+    '褪': 'tui,tun',
+    '拓': 'tuo,ta',
+    '尾': 'wei,yi',
+    '吁': 'xu,yu',
+    '殷': 'yin,yan',
+    '粘': 'zhan,nian',
+}
+
+def _parse_pinyin_list(py):
+    """Strip tone digits; return unique syllable list preserving order."""
+    base_pys = []
+    for part in py.split(','):
+        base_py = ''.join(c for c in part.strip() if not c.isdigit())
+        if base_py and base_py not in base_pys:
+            base_pys.append(base_py)
+    return base_pys
+
 # Remove duplicate keys (keep first occurrence), support comma-separated multi-pinyin
 _seen = {}
 PINYIN_MAP_CLEAN = {}
 for ch, py in PINYIN_MAP.items():
     if ch not in _seen:
         _seen[ch] = True
-        # Strip numeric suffix for grouping, support comma-separated pinyin
-        base_pys = []
-        for part in py.split(','):
-            base_py = ''.join(c for c in part.strip() if not c.isdigit())
-            if base_py:
-                base_pys.append(base_py)
-        PINYIN_MAP_CLEAN[ch] = base_pys
+        PINYIN_MAP_CLEAN[ch] = _parse_pinyin_list(py)
+
+# Apply high-freq heteronym whitelist (overrides single readings)
+for ch, py in HIGH_FREQ_HETERONYMS.items():
+    PINYIN_MAP_CLEAN[ch] = _parse_pinyin_list(py)
 
 def get_pinyin(ch):
     """Get pinyin for a character using pypinyin library"""
@@ -395,8 +550,8 @@ def get_pinyin(ch):
     return None
 
 def build_pinyin_table(char_list):
-    """Build pinyin syllable → character indices mapping"""
-    syllable_to_indices = {}
+    """Build pinyin syllable → character unicode mapping"""
+    syllable_to_uni = {}
     for i, ch in enumerate(char_list):
         # First try PINYIN_MAP_CLEAN (list of pinyin), then try pypinyin
         pys = PINYIN_MAP_CLEAN.get(ch)
@@ -404,10 +559,11 @@ def build_pinyin_table(char_list):
             py = get_pinyin(ch)
             pys = [py] if py else ['zz']
         for py in pys:
-            if py not in syllable_to_indices:
-                syllable_to_indices[py] = []
-            syllable_to_indices[py].append(i)
-    return syllable_to_indices
+            if py not in syllable_to_uni:
+                syllable_to_uni[py] = []
+            # Store unicode directly (not char_index) for efficient firmware lookup
+            syllable_to_uni[py].append(ord(ch))
+    return syllable_to_uni
 
 def generate_header(char_list, bdf_chars, output_file):
     """Generate C header with full font data arrays for embedded SPI Flash init"""
@@ -430,14 +586,19 @@ def generate_header(char_list, bdf_chars, output_file):
 
     # Generate font bitmaps
     font_data = []
-    char_map = []  # [(unicode, index), ...]
+    char_map = []  # [(unicode, char_index), ...] - char_index is position (0,1,2...), NOT bitmap offset
 
-    for ch in valid_chars:
+    for char_index, ch in enumerate(valid_chars):
         code = ord(ch)
         bitmap = bdf_chars[code]
-        char_map.append((code, len(font_data)))
+        # Store char_index (0,1,2...) instead of bitmap offset (0,12,24...)
+        # This avoids overflow when bitmap_idx > 65535 for >5461 chars
+        char_map.append((code, char_index))
         rows = bitmap_to_uint16(bitmap)
         font_data.extend(rows)
+
+    # Sort char_map by unicode for binary search in firmware
+    char_map.sort(key=lambda x: x[0])
 
     # Build pinyin table
     pinyin_table = build_pinyin_table(valid_chars)
@@ -463,8 +624,8 @@ def generate_header(char_list, bdf_chars, output_file):
         f.write("#include <stdint.h>\n\n")
 
         # ── SPI Flash address layout ──
-        f.write("/* SPI Flash layout for CN font data (base: 0x010200) */\n")
-        f.write(f"#define CN_FONT_FLASH_BASE      0x010200u\n")
+        f.write("/* SPI Flash layout for CN font data (base: 0x024000, after legacy CN 0x020000..0x023FFF) */\n")
+        f.write(f"#define CN_FONT_FLASH_BASE      0x024000u\n")
         f.write(f"#define CN_FONT_CHAR_COUNT      {len(valid_chars)}u\n")
         f.write(f"#define CN_FONT_BITMAP_SIZE     {font_size}u   /* {len(font_data)} uint16_t */\n")
         f.write(f"#define CN_FONT_INDEX_SIZE      {index_size}u   /* {len(char_map)} entries x 4 bytes */\n")
@@ -508,25 +669,26 @@ def generate_header(char_list, bdf_chars, output_file):
         # ── Pinyin table ──
         f.write(f"/* Pinyin lookup table */\n")
         f.write(f"/* Write to SPI Flash at CN_FONT_FLASH_BASE + CN_FONT_PY_OFFSET */\n")
-        f.write(f"/* Format per entry: [str_len:1][ascii:str_len][char_count:1][indices:char_count*2] */\n")
+        f.write(f"/* Format per entry: [str_len:1][ascii:str_len][char_count:1][unicodes:char_count*2] */\n")
+        f.write(f"/* Each unicode is stored as 2 bytes big-endian */\n")
         f.write(f"#define CN_FONT_PY_TOTAL_SIZE  {total_py_bytes}u\n\n")
 
         f.write(f"static const uint8_t cn_pinyin_data[{total_py_bytes}] = {{\n")
         offset = 0
-        for py, indices in pinyin_sorted:
+        for py, unilist in pinyin_sorted:
             line = f"    /* {py:6s} */ "
             data_bytes = []
             data_bytes.append(len(py))
             for c in py:
                 data_bytes.append(ord(c))
-            data_bytes.append(len(indices))
-            for idx in indices:
-                data_bytes.append(idx >> 8)
-                data_bytes.append(idx & 0xFF)
+            data_bytes.append(len(unilist))
+            for uni in unilist:
+                data_bytes.append(uni >> 8)
+                data_bytes.append(uni & 0xFF)
             line += ', '.join(f'0x{b:02X}' for b in data_bytes)
             if offset + len(data_bytes) < total_py_bytes:
                 line += ','
-            line += f'  /* {py} → {len(indices)} chars */\n'
+            line += f'  /* {py} → {len(unilist)} chars */\n'
             f.write(line)
             offset += len(data_bytes)
         f.write("};\n\n")
@@ -548,11 +710,15 @@ def generate_bin(char_list, bdf_chars, output_file):
 
     font_data = []
     char_map = []
-    for ch in valid_chars:
+    for char_index, ch in enumerate(valid_chars):
         code = ord(ch)
         bitmap = bdf_chars[code]
-        char_map.append((code, len(font_data)))
+        # Store char_index (0,1,2...) instead of bitmap offset
+        char_map.append((code, char_index))
         font_data.extend(bitmap_to_uint16(bitmap))
+
+    # Sort char_map by unicode for binary search in firmware
+    char_map.sort(key=lambda x: x[0])
 
     pinyin_table = build_pinyin_table(valid_chars)
     pinyin_sorted = sorted(pinyin_table.items())
@@ -566,13 +732,13 @@ def generate_bin(char_list, bdf_chars, output_file):
         for unicode_val, idx in char_map:
             f.write(struct.pack('<I', (unicode_val << 16) | idx))
 
-        # Pinyin table
-        for py, indices in pinyin_sorted:
+        # Pinyin table (unicodes stored as big-endian uint16)
+        for py, unilist in pinyin_sorted:
             f.write(struct.pack('B', len(py)))
             f.write(py.encode('ascii'))
-            f.write(struct.pack('B', len(indices)))
-            for idx in indices:
-                f.write(struct.pack('>H', idx))
+            f.write(struct.pack('B', len(unilist)))
+            for uni in unilist:
+                f.write(struct.pack('>H', uni))
 
         # Version marker at offset 20825
         # Pad to version offset

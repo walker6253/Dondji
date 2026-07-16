@@ -329,19 +329,19 @@ void SETTINGS_SaveChannelName(uint16_t channel, const char * name);
 void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO, uint8_t Mode);
 
 #if defined(ENABLE_CHINESE) || defined(ENABLE_FEAT_F4HWN)
-/* Legacy CN-only names @ 0x020000 removed after one-shot migration; font stays below */
+/* Legacy CN names @ 0x020000..0x023FFF; CN font follows at 0x024000 (no overlap) */
 
 // CN font SPI Flash layout (data written via web tool)
 // NOTE: these must match the output of gen_cn_font.py / cn_font_data.h
-#define CN_FONT_FLASH_BASE      0x010200u
-#define CN_FONT_CHAR_COUNT      1412u
-#define CN_FONT_BITMAP_SIZE     33888u
-#define CN_FONT_INDEX_SIZE      5648u
-#define CN_FONT_PY_OFFSET       39536u
-#define CN_FONT_PY_COUNT        337u
+#define CN_FONT_FLASH_BASE      0x024000u
+#define CN_FONT_CHAR_COUNT      6766u
+#define CN_FONT_BITMAP_SIZE     162384u
+#define CN_FONT_INDEX_SIZE      27064u
+#define CN_FONT_PY_OFFSET       189448u
+#define CN_FONT_PY_COUNT        402u
 #define CN_FONT_VERSION         2u
-#define CN_FONT_VERSION_OFFSET  44131u
-#define CN_FONT_PY_TOTAL_SIZE   4595u
+#define CN_FONT_VERSION_OFFSET  205366u
+#define CN_FONT_PY_TOTAL_SIZE   15918u
 #endif
 
 #ifdef ENABLE_CHINESE
