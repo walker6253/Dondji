@@ -2197,6 +2197,11 @@ void DisplayRSSIBar(const bool now)
             } else {
                 sprintf(str, "%3d", rssi_dBm);
             }
+            {
+                uint8_t *p_line = gFrameBuffer[line - 1];
+                for (uint8_t i = 0; i < 60u; i++)
+                    p_line[LCD_WIDTH - 60u + i] = 0;
+            }
             UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
         }
         else
@@ -2208,6 +2213,12 @@ void DisplayRSSIBar(const bool now)
                     sprintf(str, "+%u %d", ov, rssi_dBm);
                 } else {
                     sprintf(str, "%d", rssi_dBm);
+                }
+                {
+                    const uint8_t w = (uint8_t)(strlen(str) * 4);
+                    for (uint8_t py = 0; py < 6u; py++)
+                        for (uint8_t px = 0; px < 40u; px++)
+                            PutPixel(2u + px, 41u + py, false);
                 }
                 GUI_DisplaySmallest(str, 2, 41, false, true);
             } else {
