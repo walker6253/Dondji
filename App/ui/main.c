@@ -898,7 +898,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
                 if (overDb < 0)
                     overDb = 0;
                 sprintf(s_reading, "S9 %d", (int)rssi_dBm);
-                sprintf(dbb, "+%udB", (unsigned)DualVfoMapOverS9ToDisplayStep((unsigned)overDb));
+                sprintf(dbb, "+%ddB", (int)overDb);
             }
             else
                 sprintf(s_reading, "%d", (int)rssi_dBm);
