@@ -1,0 +1,3 @@
+/Users/zeev/Documents/IdeaProjects/ychen/Dondji/simulator/build/CMakeFiles/dondji_sim.dir
+/Users/zeev/Documents/IdeaProjects/ychen/Dondji/simulator/build/CMakeFiles/edit_cache.dir
+/Users/zeev/Documents/IdeaProjects/ychen/Dondji/simulator/build/CMakeFiles/rebuild_cache.dir

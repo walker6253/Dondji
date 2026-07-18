@@ -930,7 +930,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
         const char   *rxLab = DualVfoRxModeShortLabel();
         const uint8_t rxW   = DualVfoU8g2_GetSmallTextWidth(rxLab);
 
-        /* Layout from right edge: [battery] gap [percentage] gap [A/B] */
+        /* Layout from right edge: [battery] gap [percentage] gap [lock] gap [A/B] */
         const unsigned batX = LCD_WIDTH - batW;
         unsigned clearStart = batX;
 
@@ -942,10 +942,21 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
             clearStart = (unsigned)pctX;
         }
 
+        uint8_t lockX = 0;
+        bool drawLock = false;
+        if (gEeprom.KEY_LOCK && draw_side_text)
+        {
+            const uint8_t lockW = DualVfoU8g2_GetSmallTextWidth("L");
+            lockX = (uint8_t)(pctX - gap - lockW);
+            drawLock = true;
+            if ((unsigned)lockX < clearStart) clearStart = (unsigned)lockX;
+        }
+
         uint8_t modeX = 0;
         bool drawMode = false;
         {
-            const unsigned modeXraw = (draw_side_text ? (unsigned)pctX : (unsigned)batX) - gap - (unsigned)rxW;
+            const unsigned leftRef = drawLock ? (unsigned)lockX : (draw_side_text ? (unsigned)pctX : (unsigned)batX);
+            const unsigned modeXraw = leftRef - gap - (unsigned)rxW;
             if (modeXraw > (unsigned)DUAL_VFO_FREQ_COL)
             {
                 modeX = (uint8_t)modeXraw;
@@ -965,6 +976,8 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
 
         if (draw_side_text)
             DualVfoU8g2_DrawSmallText(pb, pctX, DV_Y_PCT, true);
+        if (drawLock)
+            DualVfoU8g2_DrawSmallText("L", lockX, DV_Y_PCT, true);
         if (drawMode)
             DualVfoU8g2_DrawSmallText(rxLab, modeX, DV_Y_RXMODE, true);
     }
@@ -2421,6 +2434,12 @@ void UI_DisplayMain(void)
 
     if(gLowBattery && !gLowBatteryConfirmed) {
         UI_DisplayPopup("LOW BATTERY");
+        ST7565_BlitFullScreen();
+        return;
+    }
+
+    if (gLockConfirmCountdown > 0) {
+        UI_DisplayPopup("键盘已锁定");
         ST7565_BlitFullScreen();
         return;
     }

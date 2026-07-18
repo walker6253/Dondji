@@ -1598,6 +1598,12 @@ void APP_TimeSlice500ms(void)
         if (--gKeypadLocked == 0)
             gUpdateDisplay = true;
 
+    if (gLockConfirmCountdown > 0) {
+        gLockConfirmCountdown--;
+        if (gLockConfirmCountdown == 0)
+            gUpdateDisplay = true;
+    }
+
     if (gKeyInputCountdown > 0)
     {
         if (--gKeyInputCountdown == 0)

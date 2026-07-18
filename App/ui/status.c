@@ -175,6 +175,11 @@ void UI_DisplayMainOnlyStatusBar(void)
         x += 7;
     }
 
+    if (gEeprom.KEY_LOCK) {
+        DualVfoU8g2_DrawSmallTextStatus("L", (uint8_t)x, 2u, true);
+        x += 5;
+    }
+
     x = LCD_WIDTH - UI_BATTERY_ICON_WIDTH - 2;
     {
         uint8_t battery_bitmap[UI_BATTERY_ICON_WIDTH];
@@ -414,13 +419,13 @@ void UI_DisplayStatus()
                     {
                     #endif
                         uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
-                        if(dw == 1 || dw == 3) { // DWR - dual watch + respond
+                        if(dw == 1) { // DWR - dual watch + respond (no DWR when CROSS active)
                             if(gDualWatchActive)
-                                memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
+                                memcpy(line + x, gFontDWR, sizeof(gFontDWR));
                             else
                                 memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
                         }
-                        else if(dw == 2) { // XB - crossband
+                        else if(dw == 2 || dw == 3) { // XB - crossband (including dual watch + crossband)
                             memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
                         }
                         else

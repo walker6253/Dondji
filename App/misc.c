@@ -247,6 +247,7 @@ bool              gPttWasReleased;
 bool              gPttWasPressed;
 bool              gHasVfoBackup;
 uint8_t           gKeypadLocked;
+uint8_t            gLockConfirmCountdown;
 bool              gFlagReconfigureVfos;
 uint8_t           gVfoConfigureMode;
 bool              gFlagResetVfos;

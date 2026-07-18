@@ -386,6 +386,7 @@ extern bool                  gRequestSaveSettings;
     extern bool              gRequestSaveFM;
 #endif
 extern uint8_t               gKeypadLocked;
+extern uint8_t                gLockConfirmCountdown;
 extern bool                  gFlagPrepareTX;
 
 extern bool                  gFlagAcceptSetting;   // accept menu setting

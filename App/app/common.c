@@ -21,6 +21,10 @@ void COMMON_KeypadLockToggle()
         #endif
 
         gEeprom.KEY_LOCK = !gEeprom.KEY_LOCK;
+        gUpdateStatus = true;
+
+        if (gEeprom.KEY_LOCK)
+            gLockConfirmCountdown = 100;   // 1秒弹窗
 
         gRequestSaveSettings = true;
     }
