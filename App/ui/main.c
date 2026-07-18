@@ -890,8 +890,10 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
             s_level = DualVfoConvertRssiToUvSLevel(rssi_dBm);
             const int16_t s9_dBm = -93;
 
-            if (s_level >= 1u && s_level <= 9u)
-                sprintf(s_reading, "S%u %d", (unsigned)s_level, (int)rssi_dBm);
+            if (s_level >= 1u && s_level <= 9u) {
+                sprintf(s_reading, "S%u", (unsigned)s_level);
+                sprintf(dbb, "%d", (int)rssi_dBm);
+            }
             else if (s_level == 10u)
             {
                 int32_t overDb = (int32_t)rssi_dBm - (int32_t)s9_dBm;
@@ -899,11 +901,13 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
                     overDb = 0;
                 if (overDb > 60)
                     overDb = 60;
-                sprintf(s_reading, "S9 %d", (int)rssi_dBm);
-                sprintf(dbb, "+%d", (int)overDb);
+                sprintf(s_reading, "S9");
+                sprintf(dbb, "+%d %d", (int)overDb, (int)rssi_dBm);
             }
-            else
-                sprintf(s_reading, "%d", (int)rssi_dBm);
+            else {
+                s_reading[0] = 0;
+                sprintf(dbb, "%d", (int)rssi_dBm);
+            }
 
             DualVfoDrawSmeterBoxesUv(s_level, DV_SMETER_BAR_X0, DV_SMETER_LABEL_Y);
         }
