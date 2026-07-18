@@ -765,7 +765,7 @@ static void DualVfoDrawBottomChannel(unsigned int vfoIdx)
 /* 与菜单 RxMode（gSubMenu_RXMode）四项顺序一致，底栏单行缩写 */
 static const char *DualVfoRxModeShortLabel(void)
 {
-    static const char *const abbrev[4] = {"MAIN", "A/B", "CROSS", "A"};
+    static const char *const abbrev[4] = {"MAIN", "", "CROSS", "A"};
     const bool channel_scan_running = (gScanStateDir != SCAN_OFF);
 
     if (channel_scan_running) {
@@ -942,26 +942,29 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
             clearStart = (unsigned)pctX;
         }
 
-        uint8_t lockX = 0;
-        bool drawLock = false;
-        if (gEeprom.KEY_LOCK && draw_side_text)
-        {
-            const uint8_t lockW = (uint8_t)sizeof(gFontKeyLock);
-            lockX = (uint8_t)(pctX - gap - lockW);
-            drawLock = true;
-            if ((unsigned)lockX < clearStart) clearStart = (unsigned)lockX;
-        }
-
         uint8_t modeX = 0;
         bool drawMode = false;
         {
-            const unsigned leftRef = drawLock ? (unsigned)lockX : (draw_side_text ? (unsigned)pctX : (unsigned)batX);
-            const unsigned modeXraw = leftRef - gap - (unsigned)rxW;
+            const unsigned modeXraw = (draw_side_text ? (unsigned)pctX : (unsigned)batX) - gap - (unsigned)rxW;
             if (modeXraw > (unsigned)DUAL_VFO_FREQ_COL)
             {
                 modeX = (uint8_t)modeXraw;
                 drawMode = true;
                 clearStart = (unsigned)modeX;
+            }
+        }
+
+        uint8_t lockX = 0;
+        bool drawLock = false;
+        if (gEeprom.KEY_LOCK)
+        {
+            const uint8_t lockW = (uint8_t)sizeof(gFontKeyLock);
+            const unsigned leftRef = drawMode ? (unsigned)modeX : (draw_side_text ? (unsigned)pctX : (unsigned)batX);
+            lockX = (uint8_t)(leftRef - gap - lockW);
+            if ((unsigned)lockX > (unsigned)DUAL_VFO_FREQ_COL)
+            {
+                drawLock = true;
+                if ((unsigned)lockX < clearStart) clearStart = (unsigned)lockX;
             }
         }
 
@@ -976,10 +979,10 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
 
         if (draw_side_text)
             DualVfoU8g2_DrawSmallText(pb, pctX, DV_Y_PCT, true);
-        if (drawLock)
-            memcpy(rowFbNext + lockX, gFontKeyLock, sizeof(gFontKeyLock));
         if (drawMode)
             DualVfoU8g2_DrawSmallText(rxLab, modeX, DV_Y_RXMODE, true);
+        if (drawLock)
+            memcpy(rowFbNext + lockX, gFontKeyLock, sizeof(gFontKeyLock));
     }
 }
 
