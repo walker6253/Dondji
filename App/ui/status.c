@@ -176,8 +176,8 @@ void UI_DisplayMainOnlyStatusBar(void)
     }
 
     if (gEeprom.KEY_LOCK) {
-        DualVfoU8g2_DrawSmallTextStatus("L", (uint8_t)x, 2u, true);
-        x += 5;
+        memcpy(line + x, gFontKeyLock, sizeof(gFontKeyLock));
+        x += sizeof(gFontKeyLock) + 1;
     }
 
     x = LCD_WIDTH - UI_BATTERY_ICON_WIDTH - 2;

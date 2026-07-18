@@ -946,7 +946,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
         bool drawLock = false;
         if (gEeprom.KEY_LOCK && draw_side_text)
         {
-            const uint8_t lockW = DualVfoU8g2_GetSmallTextWidth("L");
+            const uint8_t lockW = (uint8_t)sizeof(gFontKeyLock);
             lockX = (uint8_t)(pctX - gap - lockW);
             drawLock = true;
             if ((unsigned)lockX < clearStart) clearStart = (unsigned)lockX;
@@ -977,7 +977,7 @@ static void DualVfoDrawBottomSMeterAndBattery(void)
         if (draw_side_text)
             DualVfoU8g2_DrawSmallText(pb, pctX, DV_Y_PCT, true);
         if (drawLock)
-            DualVfoU8g2_DrawSmallText("L", lockX, DV_Y_PCT, true);
+            memcpy(rowFbNext + lockX, gFontKeyLock, sizeof(gFontKeyLock));
         if (drawMode)
             DualVfoU8g2_DrawSmallText(rxLab, modeX, DV_Y_RXMODE, true);
     }
@@ -2434,12 +2434,6 @@ void UI_DisplayMain(void)
 
     if(gLowBattery && !gLowBatteryConfirmed) {
         UI_DisplayPopup("LOW BATTERY");
-        ST7565_BlitFullScreen();
-        return;
-    }
-
-    if (gLockConfirmCountdown > 0) {
-        UI_DisplayPopup("键盘已锁定");
         ST7565_BlitFullScreen();
         return;
     }
