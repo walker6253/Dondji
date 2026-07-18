@@ -605,8 +605,6 @@ void MENU_ActivateMainPage(void)
 void MENU_OpenFromMainScreen(void)
 {
     MENU_ActivateMainPage();
-    gSubMenuSelection      = 0;
-    gMenuMainPageIconIndex = 0;
 }
 
 uint8_t MENU_MainPageIconCount(void)

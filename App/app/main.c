@@ -452,7 +452,8 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
         if (is_key_seven) {
             if (bKeyPressed) {
-                gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+                APP_RunToolboxMenu();
+                gRequestDisplayScreen = DISPLAY_MAIN;
             }
             return;
         }
