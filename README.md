@@ -2,7 +2,8 @@
 
 # 🚀 Dondji（叮咚鸡）
 
-> Firmware for UV-K1 / UV-K5 V3 (PY32F071 MCU)
+> Firmware for UV-K1 / UV-K5·K6 V3 (PY32F071 MCU)  
+> 开源对讲机固件项目
 
 <p>
   <a href="./README.zh.md">🇨🇳 中文文档</a> |
@@ -32,26 +33,63 @@
 
 ---
 
-## ⭐ Star History
+## Maintainer
 
-<p align="center">
-  <a href="https://star-history.com/#EthanYan6/Dondji&Date">
-    <img src="https://api.star-history.com/svg?repos=EthanYan6/Dondji&type=Date&cache=0" />
-  </a>
-</p>
+**BD1AHN**
+
+## Official Website
+
+https://ethanyan6.github.io/Dondji/
 
 ---
 
+## 商业合作声明
+
+叮咚鸡（Dondji）源码采用 Apache License 2.0 开源协议。
+
+源码开放使用。
+
+但是以下内容属于项目品牌资产：
+
+- 叮咚鸡（Dondji）名称；
+- Logo；
+- 官方网站；
+- 官方刷机入口；
+- 官方身份；
+- 官方合作关系。
+
+任何商业产品如需：
+
+- 固件预装；
+- 联名合作；
+- 品牌授权；
+- 官方认证；
+
+请联系：
+
+**BD1AHN**
+
+详细说明：
+
+- 商业使用说明：[COMMERCIAL_USE.md](COMMERCIAL_USE.md)
+- 品牌政策：[TRADEMARK.md](TRADEMARK.md)
+
+---
 ## ✨ Features
 
-- Based on **F4HWN firmware 5.3.1**
-- 🎨 Motorola R7-style UI (branch: `motorola_r7`)
-- 📡 Dual VFO UI redesign (based on UV-KX firmware ideas)
-- 📱 Classic mobile-style icon menu
-- 🔒 Lock screen UI redesign
-- 🌏 Chinese / English localization
+- Based on **F4HWN v5.3.1**; current Dondji release **v5.2.2** (UV-K1 / UV-K5·K6 V3, PY32F071)
+- 🎨 Motorola R7-style UI (branch: `motorola_r7`) + classic phone-style icon menu
+- 📡 Dual VFO / MAIN ONLY UI redesign (UV-KX-inspired)
+- 🔒 Lock screen / keypad-lock UI redesign
+- 🌏 Chinese / English UI with runtime language switch
 - 🧭 Menu restructuring & UI refactor
-- 📝 Reworked channel rename flow; phone-style nine-grid (T9) text input
+- 📝 Full **GB2312** font in SPI Flash (6766 chars) + T9 pinyin channel naming
+- 🌐 Browser web flash: firmware, font, calibration, config, writefreq, boot logo
+- 📶 Spectrum (`F+5`): Simple / Professional + waterfall
+- 🧰 Toolbox (`F+7`): electronic wooden fish + CW practice
+- 📡 MDC1200 Roger / unit ID (TX + RX popup)
+- 📖 Built-in ZH/EN help manual
+- 📻 Common Fusion extras: dedicated FM radio screen, custom boot logo / boot sound, RX/TX timer, etc.
 
 ---
 
@@ -114,8 +152,10 @@
 |------|------|
 | 刷固件 | 从 GitHub Releases 拉取最新固件，或选择本地 .bin 文件刷入 |
 | 刷字库 | 将 6766 个中文字符字库（GB2312 全部汉字）写入 SPI Flash，支持信道中文命名 |
-| 备份校准 | 导出设备校准数据备份 |
-| 恢复校准 | 从备份文件恢复校准数据 |
+| 备份 / 恢复校准 | 导出或恢复设备校准数据 |
+| 备份 / 恢复配置 | 导出或恢复菜单与按键等配置 |
+| 写频 | 信道与相关配置编程（配合本固件） |
+| 开机画面 | 上传自定义 128×64 开机图片 |
 
 ### 使用步骤
 
@@ -132,7 +172,7 @@
 | 字库文件 | `docs/font/cn_font.bin` |
 | SPI Flash 起始地址 | `0x024000` |
 | 字符数量 | 6766 个（GB2312 全部汉字） |
-| 字库大小 | 205,088 字节 (约 200 KB) |
+| 字库大小 | 205,367 字节 (约 200 KB) |
 | SPI Flash 占用 | 约 9.8% (总容量 2MB) |
 
 ### 技术说明

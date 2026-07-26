@@ -1,3 +1,24 @@
+/*
+ * Dondji Firmware
+ *
+ * Copyright (c) 2026 BD1AHN
+ *
+ * Licensed under the Apache License, Version 2.0
+ *
+ * Project:
+ *     叮咚鸡 (Dondji)
+ *
+ * Maintainer:
+ *     BD1AHN
+ *
+ * Official Website:
+ *     https://ethanyan6.github.io/Dondji/
+ *
+ * The Dondji name, logo, and official project identity
+ * are protected separately from the source code license.
+ */
+
+
 /* UV-KX smeter face (fonts_icons/smeter.xbm → icons.h), 1bpp XBM：与 u8g2 相同，每字节 bit0 为最左像素 */
 #ifndef DUALVFO_SMETER_XBM_H
 #define DUALVFO_SMETER_XBM_H

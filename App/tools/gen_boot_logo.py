@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+# Dondji Firmware
+#
+# Copyright (c) 2026 BD1AHN
+#
+# Licensed under the Apache License, Version 2.0
+#
+# Project:
+#     叮咚鸡 (Dondji)
+#
+# Maintainer:
+#     BD1AHN
+#
+# Official Website:
+#     https://ethanyan6.github.io/Dondji/
+#
+# The Dondji name, logo, and official project identity
+# are protected separately from the source code license.
 """
 将开机 Logo PNG 转为 ST7565 / gFrameBuffer 字节布局（每字节 8 个垂直像素，
 bit0 对应组内最上一行像素，与 UI_DrawPixelBuffer 一致）。

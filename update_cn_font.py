@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Dondji Firmware
+#
+# Copyright (c) 2026 BD1AHN
+#
+# Licensed under the Apache License, Version 2.0
+#
+# Project:
+#     叮咚鸡 (Dondji)
+#
+# Maintainer:
+#     BD1AHN
+#
+# Official Website:
+#     https://ethanyan6.github.io/Dondji/
+#
+# The Dondji name, logo, and official project identity
+# are protected separately from the source code license.
 """
 一键：追加汉字 → 运行 gen_cn_font.py → 同步固件/网页常量。
 

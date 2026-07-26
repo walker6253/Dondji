@@ -1,3 +1,24 @@
+/*
+ * Dondji Firmware
+ *
+ * Copyright (c) 2026 BD1AHN
+ *
+ * Licensed under the Apache License, Version 2.0
+ *
+ * Project:
+ *     叮咚鸡 (Dondji)
+ *
+ * Maintainer:
+ *     BD1AHN
+ *
+ * Official Website:
+ *     https://ethanyan6.github.io/Dondji/
+ *
+ * The Dondji name, logo, and official project identity
+ * are protected separately from the source code license.
+ */
+
+
 /**
  * Language Switcher for Dondji Web Tool
  * Supports Chinese (zh) and English (en)
@@ -36,8 +57,12 @@
       'wechatVideo': '微信视频号',
       'wechatVideoName': '小闫连不上',
       'fmoScreen': 'FMO副屏',
+      'travelJournal': '旅行手账',
+      'drivingHud': '自驾游大屏',
       'clickView': '点击查看',
       'wechatGroup': '微信群',
+      'otherFirmwareLink': '其它固件',
+      'otherFirmwareName': '山竹',
       'otherFirmware': '其它固件合集',
       
       // Timeline sidebar
@@ -139,7 +164,7 @@
       'helpContentLoading': '正在加载文档...',
       'helpTocEmpty': '暂无目录',
       'helpContentError': '加载文档失败',
-      'helpContentErrorHint': '请确保 data/help.md 文件存在。',
+      'helpContentErrorHint': '请确保 data/help.zh.md 与 data/help.en.md 文件存在。',
       'helpTocError': '加载失败',
       
       // Language switcher
@@ -456,8 +481,12 @@
       'wechatVideo': 'WeChat Video',
       'wechatVideoName': 'Little Yan Can\'t Connect',
       'fmoScreen': 'FMO Screen',
+      'travelJournal': 'Travel Journal',
+      'drivingHud': 'Driving HUD',
       'clickView': 'Click to view',
       'wechatGroup': 'WeChat Group',
+      'otherFirmwareLink': 'Other Firmware',
+      'otherFirmwareName': 'Mangosteen',
       'otherFirmware': 'Other Firmware Collection',
       
       // Timeline sidebar
@@ -559,7 +588,7 @@
       'helpContentLoading': 'Loading documentation...',
       'helpTocEmpty': 'No TOC',
       'helpContentError': 'Failed to load document',
-      'helpContentErrorHint': 'Please ensure data/help.md file exists.',
+      'helpContentErrorHint': 'Please ensure data/help.zh.md and data/help.en.md exist.',
       'helpTocError': 'Load failed',
       
       // Language switcher

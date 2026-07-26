@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Dondji Firmware
+#
+# Copyright (c) 2026 BD1AHN
+#
+# Licensed under the Apache License, Version 2.0
+#
+# Project:
+#     叮咚鸡 (Dondji)
+#
+# Maintainer:
+#     BD1AHN
+#
+# Official Website:
+#     https://ethanyan6.github.io/Dondji/
+#
+# The Dondji name, logo, and official project identity
+# are protected separately from the source code license.
 """Scan App/*.c for CJK in string literals; compare with gen_cn_font.py CN_CHARS_500 (SPI 字库生成字表)."""
 
 import re
