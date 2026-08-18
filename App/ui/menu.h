@@ -240,7 +240,7 @@ extern const char        gSubMenu_D_RSP[4][11];
 extern const char* const gSubMenu_PTT_ID[5];
 extern const char        gSubMenu_PONMSG[3][8];
 extern const char        gSubMenu_ROGER[3][6];
-extern const char        gSubMenu_RESET[2][4];
+extern const char        gSubMenu_RESET[3][4];
 extern const char* const gSubMenu_F_LOCK[F_LOCK_LEN];
 extern const char        gSubMenu_RX_TX[4][6];
 extern const char        gSubMenu_BAT_TXT[3][8];
@@ -277,6 +277,8 @@ enum {
     MEM_NAME_INPUT_SYMBOL,
     MEM_NAME_INPUT_PINYIN
 };
+/* 编辑空位占位符；不可用 '_'（符号模式可选真实下划线） */
+#define MEM_NAME_EDIT_PAD ' '
 extern uint8_t           gMemNameInputMode;
 extern uint8_t           gMemNameCandidateCount;
 extern char              gMemNameCandidates[6];
@@ -288,7 +290,7 @@ extern const uint8_t     gMemNameSymbolCharsetCount;
 // Pinyin input state for CN channel name
 #define PINYIN_MAX_LEN      6
 #define CN_CANDIDATE_MAX    6
-#define PINYIN_CAND_MAX     6  // max pinyin candidates to display
+#define PINYIN_CAND_MAX     16  // max pinyin candidates to store (scroll to view)
 extern char              gPinyinBuffer[PINYIN_MAX_LEN + 1];
 extern uint8_t           gPinyinLen;
 extern uint16_t          gCNCandidates[CN_CANDIDATE_MAX];

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>UV-K1 / UV-K5(K6) V3</title>
-  <link rel="stylesheet" href="css/style.min.css?v=20260724b">
+  <link rel="stylesheet" href="css/style.min.css?v=20260813a">
   <script src="//cdn.busuanzi.cc/busuanzi/3.6.9/busuanzi.min.js" defer></script>
   <script>
     (function () {
@@ -99,7 +99,16 @@
       <button type="button" class="flash-device-warning-modal__btn" id="flashDeviceWarningOkBtn" data-i18n="flashWarningOk">我已了解</button>
     </div>
   </div>
-  <div class="subtitle-chips" aria-label="社交平台账号" style="position:fixed;right:10px;bottom:20px;z-index:9980;">
+  <div class="subtitle-chips" id="subtitleChips" aria-label="社交平台账号" style="position:fixed;right:10px;bottom:20px;z-index:9980;">
+    <div class="subtitle-chips-header">
+      <span class="subtitle-chips-title" data-i18n="mediaAccount">BD1AHN媒体账号</span>
+      <button class="subtitle-chips-toggle" id="subtitleChipsToggle" type="button" aria-label="收起" title="收起" data-i18n-title="collapseChips" data-i18n-aria="collapseChips">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+    </div>
+    <div class="subtitle-chips-body" id="subtitleChipsBody">
     <span class="subtitle-chip subtitle-chip--douyin" title="抖音 · 小闫连不上">
       <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 3v9.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
@@ -107,14 +116,14 @@
       <span class="subtitle-chip-label" data-i18n="douyin">抖音</span>
       <span class="subtitle-chip-name" data-i18n="douyinName">小闫连不上</span>
     </span>
-    <span class="subtitle-chip subtitle-chip--bili" title="哔哩哔哩 · 小闫同学啊">
+    <span class="subtitle-chip subtitle-chip--bili" title="哔哩哔哩 · 小闫连不上">
       <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="2" y="4" width="20" height="16" rx="2"/>
         <path d="M6 8l2 3h8l2-3"/>
         <path d="M9.5 15h5"/>
       </svg>
       <span class="subtitle-chip-label" data-i18n="bili">B站</span>
-      <span class="subtitle-chip-name" data-i18n="biliName">小闫同学啊</span>
+      <span class="subtitle-chip-name" data-i18n="biliName">小闫连不上</span>
     </span>
     <span class="subtitle-chip subtitle-chip--redbook" title="小红书 · 小闫同学">
       <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -189,6 +198,8 @@
       <span class="subtitle-chip-label" data-i18n="otherFirmware">其它固件合集</span>
       <span class="subtitle-chip-name" data-i18n="clickView">点击查看</span>
     </a>
+    </div>
+    <div class="subtitle-chips-collapsed" id="subtitleChipsCollapsed" data-i18n="mediaAccount" role="button" tabindex="0" title="展开" data-i18n-title="expandChips" data-i18n-aria="expandChips">BD1AHN媒体账号</div>
   </div>
   <div class="page-layout">
     <!-- VERSION TIMELINE SIDEBAR -->
@@ -625,7 +636,7 @@
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
           </div>
-          <div class="toolbox-card-title" data-i18n="toolboxDowngrade">刷回官方解锁写频密码</div>
+          <div class="toolbox-card-title" data-i18n="toolboxDowngrade">UVK1(8)恢复原厂教程</div>
           <div class="toolbox-card-filename" data-i18n="clickDetail">点击查看详情</div>
         </button>
         <a href="archive/calibration_k1.dat" download class="toolbox-card">
@@ -687,7 +698,7 @@
           <div class="toolbox-card-title" data-i18n="toolboxK5V3StockEn">K5 V3 原厂英文固件</div>
           <div class="toolbox-card-filename">quansheng.k5v3.stock.firmware.v7.00.11.bin</div>
         </a>
-        <a href="archive/官方固件_K1_v7.02.02.bin" download class="toolbox-card">
+        <a href="archive/k1_zh_v7.02.07publish.bin" download class="toolbox-card">
           <div class="toolbox-card-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="16" height="16" rx="2"/>
@@ -695,8 +706,8 @@
               <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>
             </svg>
           </div>
-          <div class="toolbox-card-title" data-i18n="toolboxK1StockCn">K1 官方固件</div>
-          <div class="toolbox-card-filename">官方固件_K1_v7.02.02.bin</div>
+          <div class="toolbox-card-title" data-i18n="toolboxK1StockCn">K1 官方中文固件</div>
+          <div class="toolbox-card-filename">k1_zh_v7.02.07publish.bin</div>
         </a>
         <a href="archive/官方固件_K5_V.7.01.09.bin" download class="toolbox-card">
           <div class="toolbox-card-icon">
@@ -709,7 +720,7 @@
           <div class="toolbox-card-title" data-i18n="toolboxK5V3StockCn">K5 V3 官方固件</div>
           <div class="toolbox-card-filename">官方固件_K5_V.7.01.09.bin</div>
         </a>
-        <a href="archive/UV-K1官方写频软件.rar" download class="toolbox-card">
+        <a href="archive/UV-K1写频软件.rar" download class="toolbox-card">
           <div class="toolbox-card-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -720,7 +731,29 @@
             </svg>
           </div>
           <div class="toolbox-card-title" data-i18n="toolboxK1CPS">K1 官方写频软件</div>
-          <div class="toolbox-card-filename">UV-K1官方写频软件.rar</div>
+          <div class="toolbox-card-filename">UV-K1写频软件.rar</div>
+        </a>
+        <button type="button" class="toolbox-card" id="k1InitFreqDl">
+          <div class="toolbox-card-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="toolbox-card-title" data-i18n="toolboxK1InitFreq">频率初始化(应急)</div>
+          <div class="toolbox-card-tip" data-i18n="toolboxK1InitFreqTip">如果频率有问题，用原厂写频软件写频导入</div>
+          <div class="toolbox-card-filename">K1-V3中文-初始频率设置.cxf</div>
+        </button>
+        <a href="archive/ZW-show_voice_resource_ch_en_alaw.svres" download class="toolbox-card">
+          <div class="toolbox-card-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          </div>
+          <div class="toolbox-card-title" data-i18n="toolboxK1VoiceRes">K1 中文字库语音资源</div>
+          <div class="toolbox-card-filename">ZW-show_voice_resource_ch_en_alaw.svres</div>
         </a>
       </div>
     </div>
@@ -811,56 +844,35 @@
   <div id="downgradeGuideModal" class="coffee-modal coffee-modal--wide" hidden aria-hidden="true">
     <div class="coffee-modal__backdrop" data-downgrade-dismiss tabindex="-1" aria-hidden="true"></div>
     <div class="coffee-modal__panel" role="dialog" aria-modal="true" aria-labelledby="downgradeGuideModalTitle">
-      <h2 id="downgradeGuideModalTitle" class="coffee-modal__title" data-i18n="downgradeTitle">🔧 刷回官方解锁写频密码</h2>
+      <h2 id="downgradeGuideModalTitle" class="coffee-modal__title" data-i18n="downgradeTitle">🔧 UVK1(8)恢复原厂教程</h2>
       <div class="coffee-modal__content">
         <p class="coffee-modal__text">
-          <strong data-i18n="downgradeSubtitle">叮咚鸡降级官方解锁写频密码：</strong>
+          <strong data-i18n="downgradeSubtitle">用叮咚鸡菜单「恢复出厂 → 原厂(OEM)」擦除写频密钥后，再用官方 CPS 刷回原厂固件：</strong>
         </p>
         <ol class="downgrade-steps" style="text-align: left; margin: 12px 0; padding-left: 20px; color: var(--text-muted); line-height: 1.6; font-size: 0.9em;">
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep1Title">恢复全部出厂设置：</strong><br>
-            <span data-i18n="downgradeStep1Content">按住 "PTT+ 侧键 1" 开机，选择：恢复出厂->全部->确定。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep1Title">解锁全部菜单：</strong><br>
+            <span data-i18n="downgradeStep1Content">关机后，同时按住 PTT 与紧挨其下方的侧键开机，进入完整菜单。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep2Title">降级到 V4.3.2 版本：</strong><br>
-            <span data-i18n="downgradeStep2Content">刷 "f4hwn.IOTCU_K1_v4.323_b02.bin" 固件</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep2Title">执行「原厂」恢复：</strong><br>
+            <span data-i18n="downgradeStep2Content">打开「其它」→「恢复出厂」→ 选择「原厂」(OEM) → 确认。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep3Title">恢复降级配置：</strong><br>
-            <span data-i18n="downgradeStep3Content1">恢复 "降级配置.bin"</span><br>
-            <span data-i18n="downgradeStep3Content2">恢复配置地址：</span><a href="https://k5.vicicode.cn/#/tool/backup" target="_blank" rel="noopener noreferrer" style="color: var(--accent); text-decoration: underline;">https://k5.vicicode.cn/#/tool/backup</a><br>
-            <span style="color: #f0883e; font-size: 0.9em;" data-i18n="downgradeStep3Note">注意：进度正常卡到 50%-60% 左右，直接关机就行，不用重复恢复。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep3Title">关机：</strong><br>
+            <span data-i18n="downgradeStep3Content">屏幕显示「请关机」后关机（英文界面为 PWR OFF）。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep4Title">恢复全部出厂设置：</strong><br>
-            <span data-i18n="downgradeStep4Content">按住 PTT+ 侧键 1 开机，选择：恢复出厂设置->全部参数->确定。</span>
-          </li>
-          <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep5Title">官方 CPS 写频软件更新官方固件：</strong><br>
-            <span data-i18n="downgradeStep5Content">设备->升级程序->升级。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep4Title">官方 CPS 刷原厂固件：</strong><br>
+            <span data-i18n="downgradeStep4Content">用官方写频软件：设备 → 升级程序 → 升级。原厂固件可在本页应急工具箱下载。</span>
           </li>
         </ol>
-        <div class="downgrade-files" style="margin-top: 16px;">
-          <p class="coffee-modal__text" style="margin-bottom: 8px;"><strong data-i18n="downgradeFiles">所需文件下载：</strong></p>
-          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-            <a href="archive/降级配置.bin" download class="downgrade-file-btn">
-              <svg style="width: 16px; height: 16px; vertical-align: middle;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              <span data-i18n="downgradeConfigBin">降级配置.bin</span>
-            </a>
-            <a href="archive/f4hwn.IOTCU_K1_v4.323_b02.bin" download class="downgrade-file-btn">
-              <svg style="width: 16px; height: 16px; vertical-align: middle;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              f4hwn.IOTCU_K1_v4.323_b02.bin
-            </a>
-          </div>
-        </div>
+        <p class="coffee-modal__text" style="margin-top: 12px; color: var(--text-muted); font-size: 0.9em;" data-i18n="downgradeNote">
+          说明：该操作会擦除含 AES 写频密钥的 Flash 区，避免刷回官方后 CPS 要密码；校准数据保留。
+        </p>
+        <p class="coffee-modal__text" style="margin-top: 8px; text-align: right; color: var(--text-muted); font-size: 0.85em;" data-i18n="downgradeCredit">
+          感谢@sfyzzw提供思路
+        </p>
       </div>
       <button type="button" class="coffee-modal__btn" id="downgradeGuideModalCloseBtn" data-i18n="close">关闭</button>
     </div>
@@ -870,8 +882,9 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@14.1.4/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
-  <script src="js/lang.min.js?v=20260724c"></script>
+  <script src="js/lang.min.js?v=20260815h"></script>
   <script src="js/flash.min.js?v=20260718a"></script>
+  <script src="js/k1-init-freq-download.js?v=20260816a"></script>
   <script>
   (function() {
     var coffeeBtn = document.getElementById('coffeeBtn');
@@ -1063,6 +1076,63 @@
         closeDowngradeModal();
       }
     });
+  })();
+
+  (function() {
+    var chips = document.getElementById('subtitleChips');
+    var toggleBtn = document.getElementById('subtitleChipsToggle');
+    var collapsedEl = document.getElementById('subtitleChipsCollapsed');
+    if (!chips || !toggleBtn || !collapsedEl) return;
+
+    toggleBtn.addEventListener('click', function() {
+      chips.classList.add('collapsed');
+    });
+
+    collapsedEl.addEventListener('click', function() {
+      chips.classList.remove('collapsed');
+    });
+
+    collapsedEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        chips.classList.remove('collapsed');
+      }
+    });
+  })();
+
+  (function() {
+    function patchTranslations() {
+      var lang = (window.getCurrentLang ? window.getCurrentLang() : 'zh');
+      var isEn = lang === 'en';
+      var biliNameEl = document.querySelector('[data-i18n="biliName"]');
+      if (biliNameEl) {
+        biliNameEl.textContent = isEn ? "Little Yan Can't Connect" : '\u5c0f\u95eb\u8fde\u4e0d\u4e0a';
+      }
+      var biliChip = document.querySelector('.subtitle-chip--bili');
+      if (biliChip) {
+        biliChip.title = isEn ? "Bilibili \u00b7 Little Yan Can't Connect" : '\u54d4\u54e9\u54d4\u54e9 \u00b7 \u5c0f\u95eb\u8fde\u4e0d\u4e0a';
+      }
+      var mediaText = isEn ? 'BD1AHN Media Accounts' : 'BD1AHN\u5a92\u4f53\u8d26\u53f7';
+      document.querySelectorAll('[data-i18n="mediaAccount"]').forEach(function(el) {
+        el.textContent = mediaText;
+      });
+      var collapseText = isEn ? 'Collapse' : '\u6536\u8d77';
+      document.querySelectorAll('[data-i18n-title="collapseChips"]').forEach(function(el) {
+        el.title = collapseText;
+        el.setAttribute('aria-label', collapseText);
+      });
+      var expandText = isEn ? 'Expand' : '\u5c55\u5f00';
+      document.querySelectorAll('[data-i18n-title="expandChips"]').forEach(function(el) {
+        el.title = expandText;
+        el.setAttribute('aria-label', expandText);
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', patchTranslations);
+    } else {
+      patchTranslations();
+    }
+    window.addEventListener('langchange', patchTranslations);
   })();
   </script>
 </body>
