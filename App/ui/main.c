@@ -173,7 +173,7 @@ static void DualVfoFmtChId(unsigned int vfoIdx, char *out, size_t outLen)
 {
     const uint16_t ch = gEeprom.ScreenChannel[vfoIdx];
     if (IS_MR_CHANNEL(ch))
-        snprintf(out, outLen, "M-%04u", (unsigned)(ch + 1u));
+        snprintf(out, outLen, "M-%u", (unsigned)(ch + 1u));
     else if (IS_FREQ_CHANNEL(ch))
     {
         const uint8_t f   = (uint8_t)(1u + ch - FREQ_CHANNEL_FIRST);
@@ -207,6 +207,7 @@ static void DualVfoHeaderLeft(unsigned int vfoIdx, char *out, size_t outLen)
 static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 {
     const VFO_Info_t *v = &gEeprom.VfoInfo[vfoIdx];
+    const char *rev = v->FrequencyReverse ? "R " : "";
 #ifdef ENABLE_FEAT_F4HWN_NARROWER
     bool narrower = (v->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1);
     const char *bw =
@@ -214,7 +215,7 @@ static void DualVfoHeaderRight(unsigned int vfoIdx, char *out, size_t outLen)
 #else
     const char *bw = (v->CHANNEL_BANDWIDTH == BANDWIDTH_WIDE) ? "WIDE" : "NAR";
 #endif
-    snprintf(out, outLen, "%s %s %s", gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
+    snprintf(out, outLen, "%s%s %s %s", rev, gModulationStr[v->Modulation], bw, DualVfoPowerWord(vfoIdx));
 }
 
 /* 最小字宽约 4px；S 表左侧清空到该列，与频率区错开 */
@@ -282,10 +283,10 @@ static int16_t DualVfoNameDrawX(int16_t name_w, int16_t field_l, int16_t field_r
 #define DV_Y_BOT_BESIDE_AB  (DV_Y_BOT_MAIN + 2u) /* 框旁信道号、RX、TX 字下移 2px */
 #define DV_Y_BOT_FREQ_LINE  ((DV_Y_BOT_MAIN + DUAL_VFO_AB_BOT_H + 1u) - 9u) /* 相对 -10 参考：下移 1px（整串含末两位） */
 /* 底栏：S 表在左；右为电池 8px + 其下居中百分比；DV_Y_METER 对齐电池页顶 */
-#define DV_Y_METER          50u /* 电池图标（及底栏）下移 2px */
+#define DV_Y_METER          51u /* 电池图标（及底栏）下移 2px */
 #define DV_BAT_ICON_H       8u
-#define DV_Y_PCT            (DV_Y_METER + DV_BAT_ICON_H - 1u) /* 百分比下移 1px */
-#define DV_Y_RXMODE         (DV_Y_METER + 7u)            /* 右下角 A/B 模式上移 4px */
+#define DV_Y_PCT            57u /* 百分比下移 1px */
+#define DV_Y_RXMODE         57u            /* 右下角 A/B 模式上移 4px */
 #define DV_BAT_FLUSH_RIGHT  0u /* batX = LCD_WIDTH - batW - 此值，0 即贴右 */
 #define DV_BAT_MODE_SHIFT_R (-1) /* 右下角 A/B 模式相对原布局左移 3px（原 +2 -> 现 -1） */
 #define DV_BAT_PCT_SHIFT_R  2u /* 电量百分比再右移 */
@@ -426,6 +427,8 @@ static void DualVfoDrawAb1pxBlackMargins(uint8_t y, uint8_t xL, uint8_t xR)
 static uint16_t s_DualVfoAbBlinkPhase;
 static bool     s_DualVfoAbBlinkShowAb = true;
 static bool     s_DualVfoAbBlinkPrevRx;
+static uint8_t  s_dual_vfo_last_speaking_channel = 0u;
+static bool     s_dual_vfo_has_rx_channel_history = false;
 static unsigned s_DualVfoAbBlinkPrevRxVfo;
 
 /* 内区 innerL..innerR 为 abW×abH。主：黑底+镂空 A/B（固定 DUAL_VFO_AB_TALL_*）；副：空心框+最小字 A/B 框内居中（BOT_*）。
@@ -484,6 +487,12 @@ static void DualVfoDrawAbRxTxOnlyPx(unsigned int vfoIdx, uint8_t y, unsigned int
                 DualVfoU8g2_DrawSmallText(abStr, tx, ty, true);
             }
         }
+    }
+
+    if (s_dual_vfo_has_rx_channel_history && s_dual_vfo_last_speaking_channel == vfoIdx)
+    {
+        const uint8_t arrowX = rxBesideAb ? (uint8_t)(innerR + 3u) : (uint8_t)(innerR + 2u);
+        DualVfoU8g2_DrawSmallText("<", arrowX, labelY, true);
     }
 
     if (rxHere)
@@ -582,8 +591,6 @@ static void DualVfoDrawMainFreq2x(unsigned int vfoIdx, uint32_t frequency, bool 
         x0 = 44u;
     {
         const uint8_t xf = DualVfoU8g2_MainFreqComputeDrawX(frequency, x0);
-        /* 仅主频 u8g2 数字（含末两位）用 xf 右移；Tx 偏置小字仍按名义左缘 x0 居中，避免牵动其它元素 */
-        DualVfoDrawTxOffsetSmallCentered(vfoIdx, DV_TXOFS_GAP_L_MAIN, x0, (uint8_t)(DV_Y_TOP_CH + 3u));
         DualVfoU8g2_DrawMainFreqStrip(frequency, xf, (uint8_t)(DV_Y_TOP_CH + 11u));
         if (invertTail)
             DualVfoXorHStripColumns(xf, DV_Y_TOP_CH, (uint8_t)(DV_Y_TOP_CH + 11u));
@@ -621,17 +628,27 @@ static void DualVfoDrawTopDetailRowPx(unsigned int topVfoIdx, uint8_t y)
 #endif
     const VFO_Info_t *v = &gEeprom.VfoInfo[topVfoIdx];
     char              buf[48];
-    uint8_t           sq = gEeprom.SQUELCH_LEVEL;
-    if (sq > 9u)
-        sq = 9u;
-    snprintf(buf, sizeof(buf), "SQ%u", sq);
-    if ((v->StepFrequency / 100u) < 100u)
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), " %d.%02uK", v->StepFrequency / 100,
-                 v->StepFrequency % 100);
-    else
-        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), " %dK", v->StepFrequency / 100);
-    DualVfoAppendTone(buf, sizeof(buf), 'R', &v->freq_config_RX);
-    DualVfoAppendTone(buf, sizeof(buf), 'T', &v->freq_config_TX);
+    unsigned int      pos = 0;
+    buf[0] = '\0';
+
+    {
+        unsigned          d = (unsigned)v->TX_OFFSET_FREQUENCY_DIRECTION % 3u;
+        if (d != TX_OFFSET_FREQUENCY_DIRECTION_OFF)
+        {
+            char             num[16];
+            const uint32_t   o = v->TX_OFFSET_FREQUENCY;
+            DualVfoFmtTxOffsMHzTrim(num, sizeof(num), o);
+            pos += (unsigned int)sprintf(buf + pos, "%s %s", gSubMenu_SFT_D[d], num);
+        }
+    }
+    if (pos > 0)
+    {
+        buf[pos] = ' ';
+        pos++;
+        buf[pos] = '\0';
+    }
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'R', &v->freq_config_RX);
+    DualVfoAppendTone(buf + pos, sizeof(buf) - pos, 'T', &v->freq_config_TX);
     {
         const unsigned int lw = (unsigned int)DualVfoU8g2_GetSmallTextWidth(buf);
         const uint8_t      x  = (lw < LCD_WIDTH - 4u) ? (uint8_t)(LCD_WIDTH - 2u - lw) : 2u;
@@ -880,8 +897,6 @@ static void DualVfoDrawSmeterBoxesUv(uint8_t s_level, uint8_t x, uint8_t y)
     }
 }
 
-static uint8_t s_dual_vfo_last_speaking_channel = 0u;
-static bool s_dual_vfo_has_rx_channel_history = false;
 
 static void DualVfoDrawBottomStatusBar(uint8_t left_limit_x, uint8_t right_limit_x)
 {
@@ -898,20 +913,6 @@ static void DualVfoDrawBottomStatusBar(uint8_t left_limit_x, uint8_t right_limit
             s_dual_vfo_has_rx_channel_history = true;
         }
     }
-
-    /* 最下方一行：LAST A / LAST B；未接收过则不显示 */
-    const unsigned status_anchor_x = 57u;
-    uint8_t clear_x1 = (uint8_t)(status_anchor_x + 40u);
-    if (right_limit_x < clear_x1)
-        clear_x1 = right_limit_x;
-    DualVfoClearRectPx((uint8_t)status_anchor_x, DV_STATUS_BAR_LINE1_Y,
-                       clear_x1, (uint8_t)(DV_STATUS_BAR_LINE2_Y + 6u));
-
-    if (!s_dual_vfo_has_rx_channel_history)
-        return;
-
-    DualVfoU8g2_DrawSmallText(s_dual_vfo_last_speaking_channel ? "LAST B" : "LAST A",
-                              (uint8_t)status_anchor_x, DV_STATUS_BAR_LINE2_Y, true);
 }
 
 /* 主画布最底行：S 表 + S 值 + 电池（最后绘制，独占一行） */
