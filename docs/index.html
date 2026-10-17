@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>UV-K1 / UV-K5(K6) V3</title>
-  <link rel="stylesheet" href="css/style.min.css?v=20260813a">
+  <link rel="stylesheet" href="css/style.min.css?v=20261011d">
   <script src="//cdn.busuanzi.cc/busuanzi/3.6.9/busuanzi.min.js" defer></script>
   <script>
     (function () {
@@ -189,6 +189,36 @@
       <span class="subtitle-chip-label" data-i18n="otherFirmwareLink">其它固件</span>
       <span class="subtitle-chip-name" data-i18n="otherFirmwareName">山竹</span>
     </a>
+    <a href="https://ethanyan6.github.io/Syrup/" class="subtitle-chip subtitle-chip--syrup" title="其它固件 · 小甜水" aria-label="其它固件，小甜水" target="_blank" rel="noopener noreferrer">
+      <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2c2.5 2 4 4.5 4 7.2 0 2.2-1.2 4-3 5.1V17H11v-2.7c-1.8-1.1-3-2.9-3-5.1C8 6.5 9.5 4 12 2z"/>
+        <path d="M9 17h6v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2z"/>
+        <circle cx="10.2" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+        <circle cx="13.8" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="subtitle-chip-label" data-i18n="otherFirmwareLink">其它固件</span>
+      <span class="subtitle-chip-name" data-i18n="syrupFirmwareName">小甜水</span>
+    </a>
+    <a href="https://ethanyan6.github.io/uv-k1-k5-v3-game-web/" class="subtitle-chip subtitle-chip--gamefw" title="其它固件 · 游戏固件" aria-label="其它固件，游戏固件" target="_blank" rel="noopener noreferrer">
+      <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2c2.5 2 4 4.5 4 7.2 0 2.2-1.2 4-3 5.1V17H11v-2.7c-1.8-1.1-3-2.9-3-5.1C8 6.5 9.5 4 12 2z"/>
+        <path d="M9 17h6v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2z"/>
+        <circle cx="10.2" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+        <circle cx="13.8" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="subtitle-chip-label" data-i18n="otherFirmwareLink">其它固件</span>
+      <span class="subtitle-chip-name" data-i18n="gameFirmwareName">游戏固件</span>
+    </a>
+    <a href="https://ethanyan6.github.io/uv-k1-k6v3-multi-system-web/" class="subtitle-chip subtitle-chip--multisys" title="刷机工具 · 多固件刷机工具" aria-label="刷机工具，多固件刷机工具" target="_blank" rel="noopener noreferrer">
+      <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2c2.5 2 4 4.5 4 7.2 0 2.2-1.2 4-3 5.1V17H11v-2.7c-1.8-1.1-3-2.9-3-5.1C8 6.5 9.5 4 12 2z"/>
+        <path d="M9 17h6v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2z"/>
+        <circle cx="10.2" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+        <circle cx="13.8" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="subtitle-chip-label" data-i18n="flashToolLink">刷机工具</span>
+      <span class="subtitle-chip-name" data-i18n="multiFirmwareToolName">多固件刷机工具</span>
+    </a>
     <a href="https://www.yuque.com/yanyuliang/radio/wpiyfs070wcfr55s?singleDoc#" class="subtitle-chip subtitle-chip--yuque" title="其它固件合集" aria-label="其它固件合集" target="_blank" rel="noopener noreferrer">
       <svg class="subtitle-icon" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
         <path d="M19.666 2H5.333C4.597 2 4 2.597 4 3.333v16.334c0 .736.597 1.333 1.333 1.333h14.333c.737 0 1.334-.597 1.334-1.333V3.333C21 2.597 20.403 2 19.666 2zm-2 15.333H6.333V4.667h11.333v12.666z"/>
@@ -301,15 +331,21 @@
     <div class="container">
     <!-- TABS -->
     <div class="tabs" role="tablist">
-      <button class="tab" type="button" data-tab="dump" id="tabDump" data-i18n="tabDump">备份校准</button>
-      <button class="tab active" type="button" data-tab="flash" id="tabFlash" data-i18n="tabFlash">刷固件</button>
-      <button class="tab" type="button" data-tab="font" id="tabFont" data-i18n="tabFont">刷字库</button>
-      <button class="tab" type="button" data-tab="restore" id="tabRestore" data-i18n="tabRestore">恢复校准</button>
-      <button class="tab" type="button" data-tab="writefreq" id="tabWritefreq" data-i18n="tabWritefreq">写频</button>
-      <button class="tab" type="button" data-tab="logo" id="tabLogo" data-i18n="tabLogo">开机图片</button>
-      <button class="tab" type="button" data-tab="backupcfg" id="tabBackupcfg" data-i18n="tabBackupcfg">备份配置</button>
-      <button class="tab" type="button" data-tab="restorecfg" id="tabRestorecfg" data-i18n="tabRestorecfg">恢复配置</button>
-      <button class="tab" type="button" data-tab="toolbox" id="tabToolbox" data-i18n="tabToolbox">应急工具箱</button>
+      <div class="tabs-row">
+        <button class="tab" type="button" data-tab="dump" id="tabDump" data-i18n="tabDump">备份校准</button>
+        <button class="tab active" type="button" data-tab="flash" id="tabFlash" data-i18n="tabFlash">刷固件</button>
+        <button class="tab" type="button" data-tab="font" id="tabFont" data-i18n="tabFont">刷字库</button>
+        <button class="tab" type="button" data-tab="restore" id="tabRestore" data-i18n="tabRestore">恢复校准</button>
+        <button class="tab" type="button" data-tab="writefreq" id="tabWritefreq" data-i18n="tabWritefreq">写频</button>
+        <button class="tab" type="button" data-tab="mdcbook" id="tabMdcbook" data-i18n="tabMdcbook">MDC通讯录</button>
+        <button class="tab" type="button" data-tab="logo" id="tabLogo" data-i18n="tabLogo">开机图片</button>
+      </div>
+      <div class="tabs-row">
+        <button class="tab" type="button" data-tab="modifycfg" id="tabModifycfg" data-i18n="tabModifycfg">修改配置</button>
+        <button class="tab" type="button" data-tab="backupcfg" id="tabBackupcfg" data-i18n="tabBackupcfg">备份配置</button>
+        <button class="tab" type="button" data-tab="restorecfg" id="tabRestorecfg" data-i18n="tabRestorecfg">恢复配置</button>
+        <button class="tab" type="button" data-tab="toolbox" id="tabToolbox" data-i18n="tabToolbox">应急工具箱</button>
+      </div>
     </div>
 
     <!-- FLASH FIRMWARE TAB -->
@@ -520,8 +556,77 @@
         <button type="button" class="btn-inline btn-secondary" id="writefreqPagePrev" data-i18n="prevPage">上一页</button>
         <span class="writefreq-page-info" id="writefreqPageInfo" aria-live="polite" data-i18n="freqPageInfo">共 1024 条 · 已填写 0 条 · 第 1 / 103 页 · 每页 10 信道</span>
         <button type="button" class="btn-inline btn-secondary" id="writefreqPageNext" data-i18n="nextPage">下一页</button>
+        <label class="writefreq-page-size-label" for="writefreqPageSize">
+          <span data-i18n="freqRowsPerPage">每页行数</span>
+          <select id="writefreqPageSize" data-i18n-title="freqRowsPerPageTitle" title="每页最多 200 行">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </label>
       </div>
       <p id="writefreqValidation" class="writefreq-validation" style="display:none;"></p>
+    </div>
+
+    <!-- MDC ADDRESS BOOK TAB -->
+    <div class="tab-content" id="mdcbook-content">
+      <section class="section">
+        <p class="mdcbook-lead" data-i18n="mdcbookLead">
+          MDC1200 通讯录：将 MDC ID 与呼号（英文/数字，最长 6 字符，如 BD1AHN）写入电台。固件收到匹配 ID 时，弹窗直接显示呼号；未匹配则仍显示 4 位十六进制 ID。
+        </p>
+        <p class="mdcbook-meta" data-i18n="mdcbookMeta">
+          存储：SPI <code>0x011000</code> 独立 4KB 扇区（校准区之后，与校准 <code>0x010000</code> 不同扇区）。最多 400 条，每条 10 字节（ID 2B + 呼号字段 8B，实际最长 6 字符），含 16 字节表头。不占用游戏固件电子书区 <code>0x1E8000–0x200000</code>，也不与 AUTH / Slot3 / 拼音 / 语音重叠。恢复出厂（OEM 擦除到 0xF000）不会清掉本区。注意：「备份配置」只备份 <code>0x00A000</code> 设置区，<strong>不含本通讯录</strong>；请用本页 CSV 导出/导入。
+        </p>
+      </section>
+
+      <section class="section mdcbook-toolbar">
+        <div class="writefreq-actions-split">
+          <div class="writefreq-actions-left">
+            <button type="button" class="btn-inline btn-with-icon" id="mdcbookReadBtn" title="从设备读取" data-i18n-title="readFromDevice">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+              <span data-i18n="readFromDevice">从设备读取</span>
+            </button>
+            <button type="button" class="btn-inline btn-with-icon" id="mdcbookWriteBtn" title="写入设备" data-i18n-title="writeToDevice">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+              <span data-i18n="writeToDevice">写入设备</span>
+            </button>
+            <button type="button" class="btn-inline btn-secondary btn-with-icon" id="mdcbookAddBtn" title="添加一行" data-i18n-title="mdcbookAddRow">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+              <span data-i18n="mdcbookAddRow">添加一行</span>
+            </button>
+          </div>
+          <div class="writefreq-actions-right">
+            <button type="button" class="btn-inline btn-secondary btn-with-icon" id="mdcbookExportBtn" title="导出 CSV" data-i18n-title="mdcbookExport">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg></span>
+              <span data-i18n="mdcbookExport">导出 CSV</span>
+            </button>
+            <button type="button" class="btn-inline btn-secondary btn-with-icon" id="mdcbookImportBtn" title="导入 CSV" data-i18n-title="mdcbookImport">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+              <span data-i18n="mdcbookImport">导入 CSV</span>
+            </button>
+          </div>
+        </div>
+        <input type="file" id="mdcbookImportFile" accept=".csv,.txt" hidden>
+      </section>
+
+      <section class="section">
+        <p class="mdcbook-count" id="mdcbookCount" aria-live="polite"></p>
+        <div class="wide-scroll mdcbook-table-scroll">
+          <table class="mdcbook-table" id="mdcbookTable">
+            <thead>
+              <tr>
+                <th data-i18n="mdcbookColIndex">#</th>
+                <th data-i18n="mdcbookColId">MDC ID<br><span class="th-sub" data-i18n="mdcbookColIdSub">十六进制 0001–FFFF</span></th>
+                <th data-i18n="mdcbookColName">呼号<br><span class="th-sub" data-i18n="mdcbookColNameSub">A–Z / 0–9，最长 6</span></th>
+                <th class="mdcbook-delete-th" scope="col" aria-label="删除本行" data-i18n-aria="clearRow"></th>
+              </tr>
+            </thead>
+            <tbody id="mdcbookTbody"></tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <!-- BOOT LOGO TAB -->
@@ -578,6 +683,38 @@
       <div class="download-link" id="logoDownload" style="display:none;">
         <a href="#" id="logoDownloadLink" download="boot_logo.png" data-i18n="downloadLogo">下载 boot_logo.png</a>
       </div>
+    </div>
+
+    <!-- MODIFY CONFIG TAB -->
+    <div class="tab-content" id="modifycfg-content">
+      <section class="section">
+        <p style="font-size:0.85em;color:#8b949e;margin-bottom:12px;" data-i18n="modifyCfgDesc1">
+          从设备读取当前配置（菜单设置项），在网页中直接修改后写回，无需在机器上逐项调整。仅写入有变化的字节，写回后自动回读校验并重启设备。
+        </p>
+        <p style="font-size:0.85em;color:#f0883e;margin-bottom:12px;" data-i18n="modifyCfgWarning">
+          ⚠️ 请先<strong>正常开机进入使用界面</strong>后再连接 USB 操作；修改前建议先在「备份配置」页导出一份备份。
+        </p>
+      </section>
+
+      <section class="section mdcbook-toolbar">
+        <div class="writefreq-actions-split">
+          <div class="writefreq-actions-left">
+            <button type="button" class="btn-inline btn-with-icon" id="modifycfgReadBtn" title="从设备读取" data-i18n-title="readFromDevice">
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+              <span data-i18n="readFromDevice">从设备读取</span>
+            </button>
+            <button type="button" class="btn-inline btn-with-icon" id="modifycfgWriteBtn" title="写入设备" data-i18n-title="writeToDevice" disabled>
+              <span class="btn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+              <span data-i18n="writeToDevice">写入设备</span>
+            </button>
+          </div>
+        </div>
+        <p id="modifycfgStatus" class="mdcbook-count" aria-live="polite"></p>
+      </section>
+
+      <section class="section">
+        <div id="modifycfgForm" class="cfgedit-form"></div>
+      </section>
     </div>
 
     <!-- BACKUP CONFIG TAB -->
@@ -847,31 +984,35 @@
       <h2 id="downgradeGuideModalTitle" class="coffee-modal__title" data-i18n="downgradeTitle">🔧 UVK1(8)恢复原厂教程</h2>
       <div class="coffee-modal__content">
         <p class="coffee-modal__text">
-          <strong data-i18n="downgradeSubtitle">用叮咚鸡菜单「恢复出厂 → 原厂(OEM)」擦除写频密钥后，再用官方 CPS 刷回原厂固件：</strong>
+          <strong data-i18n="downgradeSubtitle">先恢复校准数据、解锁隐藏菜单并修正电池参数，再用「原厂(OEM)」擦除写频密钥，最后刷回官方固件：</strong>
         </p>
         <ol class="downgrade-steps" style="text-align: left; margin: 12px 0; padding-left: 20px; color: var(--text-muted); line-height: 1.6; font-size: 0.9em;">
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep1Title">解锁全部菜单：</strong><br>
-            <span data-i18n="downgradeStep1Content">关机后，同时按住 PTT 与紧挨其下方的侧键开机，进入完整菜单。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep1Title">恢复校准数据：</strong><br>
+            <span data-i18n="downgradeStep1Content">电台处于叮咚鸡系统、保持开机。在本网站打开【恢复校准】→ 点击【校准解读】→ 弹窗中点击【加载备份校准文件】→ 点击底部【写入官方地址】（如未自动重启则重复写入直到电台重启）→ 再点击【写入第三方地址】（同样写入到电台自动重启）。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep2Title">执行「原厂」恢复：</strong><br>
-            <span data-i18n="downgradeStep2Content">打开「其它」→「恢复出厂」→ 选择「原厂」(OEM) → 确认。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep2Title">解锁全部菜单：</strong><br>
+            <span data-i18n="downgradeStep2Content">关机后，同时按住 PTT 与紧挨其下方的侧键开机，进入完整菜单。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep3Title">关机：</strong><br>
-            <span data-i18n="downgradeStep3Content">屏幕显示「请关机」后关机（英文界面为 PWR OFF）。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep3Title">修正电池参数 + 执行原厂恢复：</strong><br>
+            <span data-i18n="downgradeStep3Content">进入「其它」菜单，将「电池类型」、「电池校准」更改为与实际电池匹配的正确值（若选项错误，刷回原厂后会显示高压无法发射、电压 655 异常），并将「导航键」选择为左右 K1。然后在同一菜单打开「恢复出厂」→ 选择「原厂」(OEM) → 确认。</span>
           </li>
           <li style="margin-bottom: 8px;">
-            <strong style="color: var(--accent);" data-i18n="downgradeStep4Title">官方 CPS 刷原厂固件：</strong><br>
-            <span data-i18n="downgradeStep4Content">用官方写频软件：设备 → 升级程序 → 升级。原厂固件可在本页应急工具箱下载。</span>
+            <strong style="color: var(--accent);" data-i18n="downgradeStep4Title">关机：</strong><br>
+            <span data-i18n="downgradeStep4Content">屏幕显示「请关机」后关机（英文界面为 PWR OFF）。</span>
+          </li>
+          <li style="margin-bottom: 8px;">
+            <strong style="color: var(--accent);" data-i18n="downgradeStep5Title">官方 CPS 刷原厂固件：</strong><br>
+            <span data-i18n="downgradeStep5Content">用官方写频软件：设备 → 升级程序 → 升级。原厂固件可在本页应急工具箱下载。</span>
           </li>
         </ol>
         <p class="coffee-modal__text" style="margin-top: 12px; color: var(--text-muted); font-size: 0.9em;" data-i18n="downgradeNote">
           说明：该操作会擦除含 AES 写频密钥的 Flash 区，避免刷回官方后 CPS 要密码；校准数据保留。
         </p>
         <p class="coffee-modal__text" style="margin-top: 8px; text-align: right; color: var(--text-muted); font-size: 0.85em;" data-i18n="downgradeCredit">
-          感谢@sfyzzw提供思路
+          感谢@sfyzzw提供思路，感谢微信@Kurt测试详细步骤
         </p>
       </div>
       <button type="button" class="coffee-modal__btn" id="downgradeGuideModalCloseBtn" data-i18n="close">关闭</button>
@@ -882,8 +1023,8 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@14.1.4/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
-  <script src="js/lang.min.js?v=20260815h"></script>
-  <script src="js/flash.min.js?v=20260718a"></script>
+  <script src="js/lang.js?v=20261011d"></script>
+  <script src="js/flash.min.js?v=20261011d"></script>
   <script src="js/k1-init-freq-download.js?v=20260816a"></script>
   <script>
   (function() {
@@ -933,7 +1074,7 @@
     function loadDonationData() {
       if (donationDataLoaded) return;
       
-      fetch('data/donations.csv')
+      fetch('data/donations.csv', { cache: 'no-store' })
         .then(function(response) {
           if (!response.ok) throw new Error('无法加载打赏数据');
           return response.text();

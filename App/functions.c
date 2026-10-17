@@ -18,6 +18,8 @@
 
 #include "app/dtmf.h"
 #include "app/mdc1200.h"
+#include "app/mdc1200_app.h"
+#include "app/yan_id_rf.h"
 #if defined(ENABLE_FMRADIO)
     #include "app/fm.h"
 #endif
@@ -156,7 +158,8 @@ void FUNCTION_Transmit()
     // if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
     BK4819_DisableDTMF();
 
-    BK4819_DisableMDC1200Rx();
+    MDC1200_AppDisableRx();
+    YAN_RF_DisableRx();
 
 #ifdef ENABLE_DTMF_CALLING
     // clear the DTMF RX buffer
@@ -304,6 +307,14 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
     }
 
     if (Function == FUNCTION_POWER_SAVE) {
+        /* UVK1 d99ce97: MDC frame ~140 ms dies in sleep; low-bat still sleeps. */
+        if (MDC1200_AppRxEnabled() && !gReducedService) {
+            gCurrentFunction = (PreviousFunction == FUNCTION_POWER_SAVE)
+                               ? FUNCTION_FOREGROUND : PreviousFunction;
+            gBatterySaveCountdown_10ms = battery_save_count_10ms;
+            gSchedulePowerSave         = false;
+            return;
+        }
         FUNCTION_PowerSave();
         return;
     }

@@ -35,6 +35,7 @@
  *     limitations under the License.
  */
 #include "app/spectrum.h"
+#include "app/mdc1200_app.h"
 #include "am_fix.h"
 #include "audio.h"
 #include "misc.h"
@@ -54,6 +55,10 @@
 #ifdef ENABLE_FEAT_F4HWN
 #include "ui/dualvfo_u8g2_freq.h"
 #endif
+
+/* First full sweep learns the noise floor (rssiMax+8). The default trigger of
+   150 otherwise opens RX on hash and never lets go. */
+#define SPECTRUM_AUTOMATIC_SQUELCH
 
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
 #include "screenshot.h"
@@ -124,12 +129,18 @@ uint16_t rssiHistory[128];
 #define WF_FLOOR_MIN_LEVEL       2U
 static uint8_t waterfallHistory[128][WATERFALL_HISTORY_DEPTH / 2];
 static uint8_t waterfallIndex = 0;
+static uint16_t lastWfScanI = 0;
 static uint16_t cachedStepsCount = 128;  /* Cache for DrawWaterfall */
 static uint16_t scanReg30 = 0;
 static uint8_t renderTimer = 0;
 static uint8_t renderPage = 0;
 #define RENDER_PERIOD_TICKS 20
-#define FRAME_LINES 8
+/* F4HWN BlitLine(7) is a full-screen blit; only pages 0–6 map to body rows. */
+#ifdef ENABLE_FEAT_F4HWN
+#define SPECTRUM_BLIT_PAGES 7
+#else
+#define SPECTRUM_BLIT_PAGES FRAME_LINES
+#endif
 
 int vfo;
 uint8_t freqInputIndex = 0;
@@ -139,6 +150,11 @@ char freqInputString[11];
 
 uint8_t menuState = 0;
 uint16_t listenT = 0;
+static uint8_t overLevelPasses = 0;
+static uint16_t lockRssi = 0;
+static uint8_t lastGlitch = 0;
+static uint8_t manualDbMaxSweeps = 0;
+#define MANUAL_DBMAX_SWEEPS 2
 
 RegisterSpec registerSpecs[] = {
     {},
@@ -546,6 +562,7 @@ static void TuneToPeak()
     scanInfo.f = peak.f;
     scanInfo.rssi = peak.rssi;
     scanInfo.i = peak.i;
+    lockRssi = peak.rssi;
     SetF(scanInfo.f);
 }
 
@@ -563,12 +580,17 @@ uint8_t GetBWRegValueForScan()
 
 uint16_t GetRssi()
 {
+    /* Glitch (REG_63) sits ~200–254 after a hop. Poll it briefly, then discard
+       the first RSSI — that sample is still saturated. Keep this on the same
+       1 µs cadence as Syrup; 100 µs waits made every step ~20× slower. */
     uint8_t guard = 50;
-    while (guard-- && (BK4819_ReadRegister(0x63) & 0xFF) >= 200)
+    lastGlitch = BK4819_GetGlitchIndicator();
+    while (guard-- && lastGlitch >= 200)
     {
         SYSTICK_DelayUs(1);
+        lastGlitch = BK4819_GetGlitchIndicator();
     }
-    BK4819_GetRSSI(); // discard first read for AGC settling
+    (void)BK4819_GetRSSI();
     uint16_t rssi = BK4819_GetRSSI();
 #ifdef ENABLE_AM_FIX
     if (settings.modulationType == MODULATION_AM && gSetting_AM_fix)
@@ -603,7 +625,6 @@ static void ToggleRX(bool on)
     #endif
     isListening = on;
 
-    //RADIO_SetupAGC(settings.modulationType == MODULATION_AM, lockAGC);
     RADIO_SetupAGC(false, lockAGC);
 
     BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, on);
@@ -626,6 +647,11 @@ static void ToggleRX(bool on)
     else
     {
         BK4819_WriteRegister(0x43, GetBWRegValueForScan());
+        /* RADIO_SetupAGC() caches (am, lock) and returns immediately on the
+           next identical call, so the post-RX gain table would otherwise
+           stick. Re-load AGC so the following sweep sees real noise again. */
+        BK4819_InitAGC(false);
+        BK4819_SetAGC(true);
     }
 }
 
@@ -635,6 +661,7 @@ static void ResetScanStats()
 {
     scanInfo.rssi = 0;
     scanInfo.rssiMax = 0;
+    scanInfo.rssiMin = RSSI_MAX_VALUE;
     scanInfo.iPeak = 0;
     scanInfo.fPeak = 0;
 }
@@ -647,7 +674,9 @@ static void InitScan()
 
     // GetStepsCount() must be called first to set effectiveScanStep
     scanInfo.measurementsCount = GetStepsCount();
+    cachedStepsCount = scanInfo.measurementsCount;
     scanInfo.scanStep = GetEffectiveScanStep();
+    BK4819_PickRXFilterPathBasedOnFrequency(scanInfo.f);
     scanReg30 = BK4819_ReadRegister(BK4819_REG_30) & ~(1u << 9);
 }
 
@@ -662,20 +691,23 @@ static void ResetBlacklist()
     memset(blacklistFreqs, 0, sizeof(blacklistFreqs));
     blacklistFreqsIdx = 0;
 #endif
+    memset(waterfallHistory, 0, sizeof(waterfallHistory));
+    waterfallIndex = 0;
+    lastWfScanI = 0;
 }
 
 static void RelaunchScan()
 {
-    InitScan();
     ResetPeak();
     ToggleRX(false);
+    /* Init after RX is off so REG_30 / filter path are cached for scan, not listen. */
+    InitScan();
 #ifdef SPECTRUM_AUTOMATIC_SQUELCH
     settings.rssiTriggerLevel = RSSI_MAX_VALUE;
 #endif
+    overLevelPasses = 0;
+    lockRssi = 0;
     preventKeypress = true;
-    scanInfo.rssiMin = RSSI_MAX_VALUE;
-    memset(waterfallHistory, 0, sizeof(waterfallHistory));
-    waterfallIndex = 0;
 #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
     SaveSettings();
 #endif
@@ -715,12 +747,6 @@ static void UpdatePeakInfoForce()
     peak.f = scanInfo.fPeak;
     peak.i = scanInfo.iPeak;
     AutoTriggerLevel();
-}
-
-static void UpdatePeakInfo()
-{
-    if (peak.f == 0 || peak.t >= 1024 || peak.rssi < scanInfo.rssiMax)
-        UpdatePeakInfoForce();
 }
 
 static uint8_t GetHistorySlot(uint16_t idx)
@@ -769,7 +795,9 @@ static void SetRssiHistory(uint16_t idx, uint16_t rssi)
 static void Measure()
 {
     uint16_t rssi = scanInfo.rssi = GetRssi();
-    SetRssiHistory(scanInfo.i, rssi);
+    /* Listen RSSI is AGC'd on the peak; do not paint it onto the sweep. */
+    if (!(isListening && currentState == SPECTRUM))
+        SetRssiHistory(scanInfo.i, rssi);
 }
 
 // Update things by keypress
@@ -816,6 +844,7 @@ static void UpdateDBMax(bool inc)
     }
 
     ClampRssiTriggerLevel();
+    manualDbMaxSweeps = MANUAL_DBMAX_SWEEPS;
     redrawStatus = true;
     redrawScreen = true;
     SYSTEM_DelayMs(20);
@@ -901,6 +930,7 @@ static void ToggleModulation()
     RADIO_SetModulation(settings.modulationType);
 
     RelaunchScan();
+    ResetBlacklist();
     redrawScreen = true;
 }
 
@@ -1053,6 +1083,18 @@ static bool IsBlacklisted(uint16_t idx)
 
 // Draw things
 
+uint8_t Rssi2PX(uint16_t rssi, uint8_t pxMin, uint8_t pxMax);
+
+static uint8_t RssiToWfLevel(uint16_t rssi)
+{
+    if ((uint16_t)(rssi + 1) <= 1u)
+        return 0;
+    uint8_t level = Rssi2PX(rssi, 0, 15);
+    if (level == 1)
+        level = WF_FLOOR_MIN_LEVEL;
+    return level;
+}
+
 static void SetWaterfallLevel(uint8_t x, uint8_t y, uint8_t level)
 {
     if (x >= 128 || y >= WATERFALL_HISTORY_DEPTH) return;
@@ -1071,48 +1113,31 @@ static uint8_t GetWaterfallLevel(uint8_t x, uint8_t y)
     return (waterfallHistory[x][row] >> 4) & 0x0F;
 }
 
+static void PaintWaterfallLive(uint8_t slot)
+{
+    if (scanInfo.i < lastWfScanI)
+    {
+        waterfallIndex = (waterfallIndex + 1) % WATERFALL_HISTORY_DEPTH;
+        for (uint8_t x = 0; x < 128; x++)
+            SetWaterfallLevel(x, waterfallIndex, 0);
+    }
+    lastWfScanI = scanInfo.i;
+    SetWaterfallLevel(slot, waterfallIndex, RssiToWfLevel(rssiHistory[slot]));
+}
+
 static void UpdateWaterfall(void)
 {
     waterfallIndex = (waterfallIndex + 1) % WATERFALL_HISTORY_DEPTH;
 
     uint16_t stepsCount = GetStepsCount();
-    /* Cache stepsCount for DrawWaterfall to use */
     cachedStepsCount = stepsCount;
     uint8_t bars = (stepsCount > 128) ? 128 : stepsCount;
 
-    uint16_t minRssi = 0xFFFF, maxRssi = 0;
-    uint16_t validSamples = 0;
     for (uint8_t x = 0; x < bars; x++)
-    {
-        uint16_t rssi = rssiHistory[x];
-        if (rssi != RSSI_MAX_VALUE && rssi != 0)
-        {
-            if (rssi < minRssi) minRssi = rssi;
-            if (rssi > maxRssi) maxRssi = rssi;
-            validSamples++;
-        }
-    }
-
-    uint16_t range = (maxRssi > minRssi) ? (maxRssi - minRssi) : 1;
-
-    for (uint8_t x = 0; x < bars; x++)
-    {
-        uint16_t rssi = rssiHistory[x];
-        uint8_t level = 0;
-        if (rssi != RSSI_MAX_VALUE && rssi != 0 && validSamples > 0)
-        {
-            uint8_t dither = (x ^ waterfallIndex) & 0x01;
-            level = (uint8_t)((((uint32_t)(rssi - minRssi) * 15 + dither) / range));
-            if (level == 0 && (rssi & 0x01)) level = 1;
-            if (level == 1) level = WF_FLOOR_MIN_LEVEL;
-        }
-        SetWaterfallLevel(x, waterfallIndex, level);
-    }
+        SetWaterfallLevel(x, waterfallIndex, RssiToWfLevel(rssiHistory[x]));
 
     for (uint8_t x = bars; x < 128; x++)
-    {
         SetWaterfallLevel(x, waterfallIndex, 0);
-    }
 }
 
 static void DrawWaterfall(void)
@@ -2209,6 +2234,8 @@ static void Render()
         RenderStill();
         break;
     }
+
+    /* LCD transfer is one page per tick — see Tick(). */
 }
 
 static bool HandleUserInput()
@@ -2261,6 +2288,7 @@ static void Scan()
         SetFScan(scanInfo.f);
         Measure();
         UpdateScanInfo();
+        PaintWaterfallLive(slot);
     }
 }
 
@@ -2285,17 +2313,46 @@ static void UpdateScan()
         memset(&rssiHistory[scanInfo.measurementsCount], 0,
                sizeof(rssiHistory) - scanInfo.measurementsCount * sizeof(rssiHistory[0]));
 
-    UpdateWaterfall();
+    /* Follow the current sweep so a leftover high RSSI floor cannot clip
+       the whole trace against a sticky dbMax. 3/9 holds auto-scale off. */
+    if (manualDbMaxSweeps > 0)
+    {
+        if (--manualDbMaxSweeps == 0)
+            redrawStatus = true;
+    }
+    else
+    {
+        int newMax = Rssi2DBm(scanInfo.rssiMax) + 5;
+        int dbMin = settings.dbMin + 10;
+        if (newMax < dbMin)
+            newMax = dbMin;
+        if (newMax > 10)
+            newMax = 10;
+        if (settings.dbMax != newMax)
+        {
+            settings.dbMax = newMax;
+            redrawStatus = true;
+        }
+    }
 
-    redrawScreen = true;
     preventKeypress = false;
 
-    UpdatePeakInfo();
-    if (IsPeakOverLevel())
+    /* Always take this sweep's peak so a stale listen RSSI cannot re-lock. */
+    UpdatePeakInfoForce();
+    if (scanInfo.rssiMax >= settings.rssiTriggerLevel)
     {
-        ToggleRX(true);
-        TuneToPeak();
-        return;
+        /* One noisy pass is not a QSO; require two full sweeps over the line. */
+        if (++overLevelPasses >= 2)
+        {
+            overLevelPasses = 0;
+            ToggleRX(true);
+            TuneToPeak();
+            return;
+        }
+    }
+    else
+    {
+        overLevelPasses = 0;
     }
 
     newScanStart = true;
@@ -2337,6 +2394,7 @@ static void UpdateListening()
     if (currentState == SPECTRUM)
     {
         BK4819_WriteRegister(0x43, GetBWRegValueForScan());
+        SYSTICK_DelayUs(400);
         Measure();
         BK4819_WriteRegister(0x43, listenBWRegValues[settings.listenBw]);
     }
@@ -2359,22 +2417,35 @@ static void UpdateListening()
 
     redrawScreen = true;
 
-    #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
-        if ((IsPeakOverLevel() && !tailFound) || monitorMode)
-        {
-            listenT = 100;
-            return;
-        }
-    #else
-        if (IsPeakOverLevel() || monitorMode)
-        {
-            listenT = 1000;
-            return;
-        }
-    #endif
+    /* V300G holds RX only while the peak stays over the trigger. On BK4819 the
+       RSSI barely falls after AGC, so a dead carrier still looks "over level".
+       REG_63 glitch stays high (≥200) when there is no quiet carrier — that is
+       the real squelch. A ~6 dB RSSI drop from lock is a second check. */
+    const bool noCarrier =
+        (lastGlitch >= 200) ||
+        ((lockRssi >= 12u) && (scanInfo.rssi + 12u < lockRssi));
 
-    ToggleRX(false);
-    ResetScanStats();
+#ifdef ENABLE_FEAT_F4HWN_SPECTRUM
+    if (monitorMode || (IsPeakOverLevel() && !tailFound && !noCarrier))
+    {
+        listenT = 100;
+        return;
+    }
+#else
+    if (monitorMode || (IsPeakOverLevel() && !noCarrier))
+    {
+        listenT = 1000;
+        return;
+    }
+#endif
+
+    /* Same path as LEFT/RIGHT, plus drop the listen-time dB floor so the
+       next sweep re-learns noise instead of painting a high flat wall. */
+    settings.dbMin = -128;
+    RelaunchScan();
+    memset(rssiHistory, 0, sizeof(rssiHistory));
+    redrawScreen = false;
+    redrawStatus = true;
 }
 
 static void Tick()
@@ -2406,14 +2477,8 @@ static void Tick()
         // so user can EXIT, change step, etc.
         if (!isListening)
         {
-            UpdatePeakInfo();
-            if (IsPeakOverLevel())
-            {
-                ToggleRX(true);
-                TuneToPeak();
-                return;
-            }
-            redrawScreen = true;
+            /* Unlock keys only. Locking RX here uses a half-sweep peak and
+               a trigger learned from the left side, so hash freezes the page. */
             preventKeypress = false;
         }
     }
@@ -2448,23 +2513,29 @@ static void Tick()
         RenderStatus();
         redrawStatus = false;
     }
+    /* Paint on a fixed cadence, not once per 128-step sweep. Otherwise x128
+       freezes until the round finishes, then dumps the whole LCD at once. */
     if (redrawScreen || ++renderTimer >= RENDER_PERIOD_TICKS)
     {
         Render();
-        // For screenshot
         #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
             SCREENSHOT_Update(false);
         #endif
         redrawScreen = false;
         renderTimer = 0;
     }
+
     ST7565_BlitLine(renderPage);
-    if (++renderPage >= FRAME_LINES)
+    if (++renderPage >= SPECTRUM_BLIT_PAGES)
         renderPage = 0;
 }
 
 void APP_RunSpectrum()
 {
+    /* 频谱为独立循环(冻结主tick): 入口先停 MDC1200 软接收采样,
+       避免采样期间的 ADC 外部触发模式影响本模式的 ADC 使用 */
+    MDC1200_AppDisableRx();
+
     settings.backlightState = gEeprom.BACKLIGHT_TIME == 0 ? false : true;
 
     // TX here coz it always? set to active VFO
@@ -2508,7 +2579,7 @@ void APP_RunSpectrum()
 
     isListening = true; // to turn off RX later
     redrawStatus = true;
-    redrawScreen = true;
+    redrawScreen = false; /* wait for the first full sweep; empty history looks like a half trace */
     newScanStart = true;
 
     ToggleRX(true), ToggleRX(false); // hack to prevent noise when squelch off

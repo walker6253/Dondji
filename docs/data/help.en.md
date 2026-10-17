@@ -2,7 +2,7 @@
 
 This manual is divided into four chapters:
 
-1. **Chapter 1 — System User Guide**: Day-to-day operation after flashing Dondji firmware (radio, scanning, saving channels, naming, spectrum, toolbox, etc.)
+1. **Chapter 1 — System User Guide**: Day-to-day operation after flashing Dondji firmware (radio, scanning, saving channels, naming, spectrum, etc.)
 2. **Chapter 2 — Firmware & Flashing**: Web-based flashing, calibration, configuration, storage addresses, and technical notes
 3. **Chapter 3 — FAQ & Other**: Frequently asked questions and contact information
 4. **Chapter 4 — Licensing & Brand**: Commercial use notice and trademark policy
@@ -63,7 +63,6 @@ Welcome to **Dondji (叮咚鸡)**. This chapter covers basic operation after pow
 | `F+5` | Enter spectrum |
 | `Long 5` | Dual watch + dual VFO: range scan (see 1.3) |
 | `Long 6` or `F+6` | Switch power level |
-| `F+7` | Open **Toolbox** (electronic wooden fish / CW) — not a game |
 | `Long 8` | Reverse frequency (swap TX/RX) |
 | `F+8` | Switch backlight mode |
 | `Long 9` | Jump to the channel set in **Other → PTT Call** |
@@ -300,28 +299,65 @@ This setting is stored in configuration (SPI `0x00A148`) and is included in conf
 
 ---
 
-## 1.7 Toolbox (F+7)
+## 1.7 MDC ID and TX Tail Tone
 
-On the main screen, **`F+7`** opens the **Toolbox** (not the brick-breaker game):
+Current firmware supports both **MDC1200** and **Yan ID** (coexist, no conflict).
 
-| Item | Description |
-|------|------|
-| **Electronic wooden fish** | Fun tap sound |
-| **cw** | Morse practice / related features |
+1. **MENU** → **Other** → **TX Tail (Roger)**: **Off / ROGER / MDC / Yan ID / Custom1 / Custom2 / Custom3** (same labels in EN/CN UI).
+   - **Custom1**: four-tone chirp (1975→2100→3140→2800 Hz, 10ms gaps)
+   - **Custom2**: three 430 Hz beeps (350 ms on / 350 ms off)
+   - **Custom3**: three-tone drop (1650→1100→750 Hz)
+2. With **MDC** selected, edit the 4-digit hex unit ID in the **MDC ID** menu (defaults to not-sent when 0000); with **Yan ID** selected, edit a 6-character callsign (uppercase letters / digits) in the **Yan ID** menu.
+3. Receive alerts require enabling **MDC Rx** / **Yan Rx** in the menu: when the other station sends MDC / Yan ID, the main screen can show an ID receive alert (MDC shows the callsign if matched in the address book, otherwise the hex ID; Yan ID shows the remote callsign directly).
 
-**EXIT** leaves the toolbox.
+In config backup, MDC ID is at SPI `0x00A172` (2 bytes) and Yan ID at SPI `0x00A088` (8 bytes); see Chapter 2 address table.
 
 ---
 
-## 1.8 MDC ID and TX Tail Tone
+## 1.8 Dual PTT
 
-Current firmware still uses **MDC1200** (Yan ID replacement is in the design doc; **not yet implemented**).
+When **not MAIN ONLY** (dual-watch / cross-band dual-row home), **side key 1 or side key 2** can act as a second PTT: hardware PTT keys the **top main** channel; hold the side key bound to PTT to key the **bottom** channel.
 
-1. **MENU** → **Other** → **TX Tail (Roger)**: **Off / ROGER / MDC**.
-2. With **MDC** selected, edit the 4-digit hex unit ID in the **MDC ID** menu.
-3. When the other station sends MDC and local Roger is MDC, the main screen can show an **MDC ID** receive alert.
+### How to enable
 
-In config backup, MDC ID is at SPI `0x00A172` (2 bytes); see Chapter 2 address table.
+1. Make sure receive mode is **not** MAIN ONLY (pick dual watch or cross band so the home screen shows two rows).
+2. **MENU** → **Side key 1 short/long**, or **Side key 2 short/long**.
+3. Choose **PTT** and confirm.
+4. The other slot on that same key is set to **PTT** automatically; **Set PTT** is forced to **CLASSIC** (hold-to-talk).
+5. Only **one** side key can own dual PTT: binding PTT on side key 2 clears PTT from side key 1 (and vice versa).
+
+To turn dual PTT off, bind another action (or switch back to MAIN ONLY).
+
+### TX rules
+
+| Action | Behavior |
+|--------|----------|
+| Hold hardware PTT | TX on the **top** main channel |
+| Hold the PTT-bound side key 1 or 2 | TX on the **bottom** channel (whole key is PTT; original short/long actions do not run) |
+| Hold both | **Hardware PTT wins** (main channel) |
+| After unkey | Main stays on the same row — **rows do not swap** |
+
+### Relation to MAIN ONLY
+
+- Dual PTT only works when **not MAIN ONLY**.
+- Entering MAIN ONLY keeps the side-key PTT assignment, but presses **do not TX**; leaving MAIN ONLY restores it.
+- PTT may still appear in the list under MAIN ONLY, but **saving will not stick**; leave MAIN ONLY first.
+
+### Home screen while side-key TX
+
+Depends on the mic / TX animation setting:
+
+| Mode | Side-key TX on bottom channel |
+|------|--------------------------------|
+| **Off** | Bottom channel name / frequency inverted |
+| **Bar** | Same invert, plus a level bar / waveform on the main-channel top strip |
+| **Popup** | Only the TX popup; no extra TX mark on the row |
+
+### Notes
+
+- Do not confuse this with **Set PTT** (CLASSIC / ONEPUSH): that only changes whether the **hardware** PTT is hold-to-talk or toggle; it does **not** enable dual PTT.
+- **PTT** is listed only under side key 1 / side key 2 short and long — not MENU long.
+- While dual PTT is on, the PTT-bound side key cannot navigate the menu (use ↑/↓ or the other side key).
 
 ---
 
@@ -488,7 +524,8 @@ Web programming and firmware often use **SPI physical addresses** directly; lega
 | `0x009000` – `0x0090D5` | VFO frequency data | ~214 B |
 | `0x00A000` – `0x00A175` | Settings / config | ~373 B (512 B backup block) |
 | `0x010000` – `0x0101FF` | Calibration | 512 B |
-| `0x020000` – `0x023FFF` | Legacy Chinese channel names (erasable after migration) | 16 KB |
+| `0x011000` – `0x011FFF` | MDC address book (ID↔callsign) | 4 KB |
+| `0x020000` – `0x023FFF` | Legacy Chinese channel names (**boot one-shot migration only**; erased after migrate, unused by current R/W) | 16 KB |
 | `0x024000` – `0x056236` | Chinese font + Pinyin index | ~200 KB |
 | `0x14C000` – `0x14CFFF` | Voice index table | ~4 KB |
 | `0x14D000` – ~`0x165000` | Voice audio data | ~1.6 MB |
@@ -526,6 +563,7 @@ Config backup starts at `0x00A000`, 512 B total. Fields match 2.5; full list:
 | `0x00A0B8` | 8 B | Voice, dBm correction start |
 | `0x00A0B9` | 7 B | dBm correction table |
 | `0x00A0C0` | 8 B | Alarm, Roger, tail time, TX VFO, battery type |
+| `0x00A088` | 8 B | **Yan ID** (6-char callsign) + MDC Rx toggle + Yan Rx toggle |
 | `0x00A0C8` | 16 B | Logo custom text line 1 |
 | `0x00A0D0` | 8 B | DTMF related |
 | `0x00A0D8` | 16 B | DTMF timing + Logo text line 2 |
@@ -539,6 +577,7 @@ Config backup starts at `0x00A000`, 512 B total. Fields match 2.5; full list:
 | `0x00A170` | 1 B | UI language |
 | `0x00A172` | 2 B | **MDC1200 unit ID** |
 | `0x00A174` | 1 B | Boot prompt / power-on sound |
+| `0x011000` | 4 KB | **MDC address book** (16B header + 10B/entry: 2B BE ID + 8B name field, max 6 chars used, max 400 entries) |
 
 ### Calibration Data (SPI)
 
@@ -567,7 +606,8 @@ EEPROM `0x1E00` (v4.x) and `0xB000` (v5.0.0+) both map to `0x010000`–`0x0101FF
 
 Pinyin record format: `[syllable length][ASCII pinyin][char count][Unicode×2…]`
 
-Legacy Chinese channel names: `0x020000`–`0x023FFF` (non-overlapping with font).
+Legacy Chinese channel names: `0x020000`–`0x023FFF` (non-overlapping with font).  
+**Current firmware**: at boot, if this block is not blank, valid Chinese names are migrated once into the unified name area `0x004000`, then the legacy block is erased. After migration the region is **never read or written**. All CN/EN channel names live only at `0x004000`. The 16 KB exists only for one-shot import on old radios and **can be reclaimed** in a future flash map (do not place live data here while the migration path remains).
 
 ### Voice Prompts and Boot Logo
 
@@ -639,7 +679,7 @@ Legacy Chinese channel names: `0x020000`–`0x023FFF` (non-overlapping with font
    Answer: Flash the matching font pack and set **Display → Display Language** to Chinese.
 
 3. **Dual channel: sometimes channel name below, sometimes frequency?**  
-   Answer: By design. Without Chinese in the name, the lower line shows frequency and the upper corner shows the channel name. Names are up to ~5 Chinese characters (~15 English letters); when space is tight, display positions swap.
+   Answer: By design. Without Chinese in the name, the lower line shows frequency and the upper corner shows the channel name. Names are up to ~5 Chinese characters (~15 English letters); when the name exceeds the display length it scrolls. When programming via the website, names longer than 5 Chinese characters will be truncated in the display...
 
 4. **Bricked?**  
    Answer: Wrong firmware for your radio? Other programming tools or random calibration edits? Did you follow the web flash steps exactly?  
@@ -702,11 +742,13 @@ Legacy Chinese channel names: `0x020000`–`0x023FFF` (non-overlapping with font
 
     - ~280 MHz is VHF/UHF boundary — affects filtering and PA gain  
     - Wide RX can listen SW up to 1.3 GHz; TX still follows band table limits  
+15. **Why are the left/right or up/down keys reversed?**
+   Answer: The firmware supports both K1 and K6 V3, so you need to set it yourself. Hold **PTT** and the lower adjacent side key while powering on to unlock related options; pick the navigation key layout for your model. UI usually shows K1 or K5 only (K5/K6 share the same chip, different shells).
 
 ## 3.2 Contact
 
 - Douyin: 小闫连不上  
-- Bilibili: 小闫同学啊  
+- Bilibili: 小闫连不上  
 - Xiaohongshu: 小闫同学  
 - WeChat Channels: 小闫连不上  
 

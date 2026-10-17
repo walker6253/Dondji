@@ -147,9 +147,16 @@ typedef enum ALARM_Mode_t ALARM_Mode_t;
 enum ROGER_Mode_t {
     ROGER_MODE_OFF = 0,
     ROGER_MODE_ROGER,
-    ROGER_MODE_MDC
+    ROGER_MODE_MDC,
+    ROGER_MODE_YAN_ID,
+    ROGER_MODE_CUSTOM1,
+    ROGER_MODE_CUSTOM2,
+    ROGER_MODE_CUSTOM3
 };
 typedef enum ROGER_Mode_t ROGER_Mode_t;
+
+#define YAN_ID_LEN  6
+#define YAN_ID_NAME "Yan ID"
 
 enum CHANNEL_DisplayMode_t {
     MDF_FREQUENCY = 0,
@@ -237,6 +244,9 @@ typedef struct {
 #endif
     POWER_OnDisplayMode_t POWER_ON_DISPLAY_MODE;
     ROGER_Mode_t          ROGER;
+    char                  yan_id[YAN_ID_LEN + 1];
+    bool                  yan_id_rx;
+    bool                  mdc_id_rx;
     uint8_t               REPEATER_TAIL_TONE_ELIMINATION;
     uint8_t               KEY_1_SHORT_PRESS_ACTION;
     uint8_t               KEY_1_LONG_PRESS_ACTION;
@@ -330,7 +340,17 @@ void SETTINGS_SaveChannelName(uint16_t channel, const char * name);
 void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO, uint8_t Mode);
 
 #if defined(ENABLE_CHINESE) || defined(ENABLE_FEAT_F4HWN)
-/* Legacy CN names @ 0x020000..0x023FFF; CN font follows at 0x024000 (no overlap) */
+/*
+ * Legacy CN names: 0x020000..0x023FFF (16 KB).
+ * Current firmware only migrates once at boot (settings.c) into the unified
+ * name area 0x004000..0x007FFF, then sector-erases the legacy block.
+ * After a successful migration the region is blank (0xFF) and is NEVER read
+ * or written again for channel names. CN font starts at 0x024000 and does
+ * not use this range. The 16 KB is reserved only for that one-shot import
+ * on old radios — safe to reclaim for a new feature in a future flash map
+ * once migration can be dropped (or always, if you only support post-migration
+ * images). Do not place live data here until that decision is made.
+ */
 
 // CN font SPI Flash layout (data written via web tool)
 // NOTE: these must match the output of gen_cn_font.py / cn_font_data.h

@@ -37,6 +37,8 @@
 #include "app/main.h"
 #include "app/menu.h"
 #include "app/mdc1200.h"
+#include "app/mdc1200_app.h"
+#include "app/yan_id_rf.h"
 #include "app/scanner.h"
 #if defined(ENABLE_UART) || defined(ENABLE_USB)
     #include "app/uart.h"
@@ -772,63 +774,12 @@ static void CheckRadioInterrupts(void)
         }
 #endif
 
-        if (interrupts.fskRxSync)
+        if (interrupts.fskRxSync || interrupts.fskFifoAlmostFull || interrupts.fskRxFinied)
         {
-            if (gEeprom.ROGER == ROGER_MODE_MDC &&
-                (gCurrentFunction == FUNCTION_RECEIVE || gCurrentFunction == FUNCTION_MONITOR))
-            {
-                const uint16_t rx_sync_flags = BK4819_ReadRegister(BK4819_REG_0B);
-                const bool rx_sync_neg = (rx_sync_flags & (1u << 7)) ? true : false;
-                
-                mdc1200_rx_buffer_index = 0;
-                for (unsigned int i = 0; i < sizeof(mdc1200_sync_suc_xor); i++)
-                    mdc1200_rx_buffer[mdc1200_rx_buffer_index++] = mdc1200_sync_suc_xor[i] ^ (rx_sync_neg ? 0xFF : 0x00);
-            }
-        }
-
-        if (interrupts.fskFifoAlmostFull)
-        {
-            if (gEeprom.ROGER == ROGER_MODE_MDC &&
-                (gCurrentFunction == FUNCTION_RECEIVE || gCurrentFunction == FUNCTION_MONITOR))
-            {
-                const uint16_t rx_sync_flags = BK4819_ReadRegister(BK4819_REG_0B);
-                const bool rx_sync_neg = (rx_sync_flags & (1u << 7)) ? true : false;
-                const uint16_t count = BK4819_ReadRegister(BK4819_REG_5E) & (7u << 0);
-                
-                for (int i = 0; i < count; i++) {
-                    const uint16_t word = BK4819_ReadRegister(BK4819_REG_5F) ^ (rx_sync_neg ? 0xFFFF : 0x0000);
-                    
-                    if (mdc1200_rx_buffer_index < sizeof(mdc1200_rx_buffer))
-                        mdc1200_rx_buffer[mdc1200_rx_buffer_index++] = (word >> 0) & 0xff;
-                    
-                    if (mdc1200_rx_buffer_index < sizeof(mdc1200_rx_buffer))
-                        mdc1200_rx_buffer[mdc1200_rx_buffer_index++] = (word >> 8) & 0xff;
-                }
-                
-                if (mdc1200_rx_buffer_index >= sizeof(mdc1200_rx_buffer)) {
-                    if (MDC1200_process_rx_data(
-                            mdc1200_rx_buffer,
-                            mdc1200_rx_buffer_index,
-                            &mdc1200_op,
-                            &mdc1200_arg,
-                            &mdc1200_unit_id)) {
-                        mdc1200_rx_ready_tick_500ms = 10;
-                        gUpdateDisplay = true;
-                    }
-                    mdc1200_rx_buffer_index = 0;
-                }
-            }
-        }
-
-        if (interrupts.fskRxFinied)
-        {
-            if (gEeprom.ROGER == ROGER_MODE_MDC &&
-                (gCurrentFunction == FUNCTION_RECEIVE || gCurrentFunction == FUNCTION_MONITOR))
-            {
-                const uint16_t fsk_reg59 = BK4819_ReadRegister(BK4819_REG_59) & ~((1u << 15) | (1u << 14) | (1u << 12) | (1u << 11));
-                BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | fsk_reg59);
-                BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | fsk_reg59);
-            }
+            /* MDC1200 RX 已改为软件FFSK解调(不占用FSK modem), 此处仅Yan ID
+               需要硬件FSK中断 */
+            if (YAN_RF_ReceiveEnabled())
+                YAN_RF_OnRadioInterrupt(interrupts.__raw);
         }
     }
 }
@@ -950,46 +901,7 @@ void APP_Update(void)
 #ifdef ENABLE_FEAT_F4HWN
     if (gCurrentFunction == FUNCTION_TRANSMIT && (gTxTimeoutReachedAlert || SerialConfigInProgress()))
     {
-        if(gSetting_set_tot >= 2)
-        {
-            if (gEeprom.BACKLIGHT_TIME == 0) {
-                if (gBlinkCounter == 0 || gBlinkCounter == 250)
-                {
-                    GPIO_TogglePin(GPIO_PIN_FLASHLIGHT);
-                }
-            }
-            else
-            {
-                if (gBlinkCounter == 0)
-                {
-                    //BACKLIGHT_TurnOn();
-                    BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MAX);
-                }
-                else if(gBlinkCounter == 15000)
-                {
-                    //BACKLIGHT_TurnOff();
-                    BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MIN);
-                }
-            }
-        }
-
         gBlinkCounter++;
-
-        if(
-            (gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME != 0 && gBlinkCounter > 74000) || 
-            (gSetting_set_tot == 3 && gEeprom.BACKLIGHT_TIME == 0 && gBlinkCounter > 79000) || 
-            (gSetting_set_tot != 3 && gBlinkCounter > 76000)
-            ) // try to calibrate 10 times
-        {
-            gBlinkCounter = 0;
-
-            if(gSetting_set_tot == 1 || gSetting_set_tot == 3)
-            {
-                BK4819_DisableScramble();
-                BK4819_PlaySingleTone(gTxTimeoutToneAlert, 30, 1, true);
-                gTxTimeoutToneAlert += 100;
-            }
-        }
     }
 #endif
 
@@ -1000,32 +912,10 @@ void APP_Update(void)
 #ifdef ENABLE_FEAT_F4HWN
         if(gBacklightCountdown_500ms > 0 || gEeprom.BACKLIGHT_TIME == 61)
         {
-            //BACKLIGHT_TurnOn();
             BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MAX);
         }
 
         gTxTimeoutReachedAlert = false;
-        gTxTimeoutToneAlert = 800;
-
-        if (gSetting_set_ptt_session) // Improve OnePush if TOT
-        {
-            if(gPttOnePushCounter == 1)
-            {
-                gPttOnePushCounter = 3;
-            }
-            else if(gPttOnePushCounter == 2)
-            {
-                ProcessKey(KEY_PTT, false, false);
-                gPttIsPressed = false;
-                gPttOnePushCounter = 0;
-                gPttWasReleased = true;
-                //if (gKeyReading1 != KEY_INVALID)
-                //  gPttWasReleased = true;
-            }
-            #if defined(ENABLE_FEAT_F4HWN_CTR) || defined(ENABLE_FEAT_F4HWN_INV)
-            ST7565_ContrastAndInv();
-            #endif
-        }
 #endif
 
         APP_EndTransmission();
@@ -1244,52 +1134,19 @@ void CheckKeys(void)
     const bool isPressed = !GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !serialConfigInProgress;
 #endif
 
-#ifdef ENABLE_FEAT_F4HWN
-    if (gSetting_set_ptt_session)
-    {
-        if ((isPressed && (gPttOnePushCounter == 0 || gPttOnePushCounter == 2)) ||
-            (!isPressed && (gPttOnePushCounter == 1 || gPttOnePushCounter == 3)) ||
-            serialConfigInProgress) 
-        {
-            if (++gPttDebounceCounter >= 3 || (serialConfigInProgress && gPttOnePushCounter > 0))
-            {
-                gPttDebounceCounter = 0;
-                
-                if (gPttOnePushCounter == 0)
-                {   // start transmitting
-                    boot_counter_10ms   = 0;
-                    gPttIsPressed       = true;
-                    gPttOnePushCounter = 1;
-                    ProcessKey(KEY_PTT, true, false);
-                } 
-                else if (gPttOnePushCounter == 3 || serialConfigInProgress)
-                {   // stop transmitting
-                    StopTransmitting();
-                    gPttOnePushCounter = 0;
-                } 
-                else
-                    gPttOnePushCounter++;
-            }
-        } 
-        else
-            gPttDebounceCounter = 0;
-
-        //gDebug = gPttOnePushCounter;
-    } 
-    else 
-#endif
     {
         if (gPttIsPressed)
         {
             if (!isPressed)
             {   // PTT released or serial comms config in progress
                 if (++gPttDebounceCounter >= 3 || serialConfigInProgress)   // 30ms
-                {   // stop transmitting
+                {
+                    // stop transmitting
                     gPttDebounceCounter = 0;
                     StopTransmitting();
                 }
-            } 
-            else 
+            }
+            else
                 gPttDebounceCounter = 0;
         }
         else if (isPressed)
@@ -1298,6 +1155,9 @@ void CheckKeys(void)
             {   // start transmitting
                 boot_counter_10ms   = 0;
                 gPttDebounceCounter = 0;
+#ifdef ENABLE_FEAT_F4HWN
+                ACTION_DualPttStop();
+#endif
                 gPttIsPressed       = true;
                 ProcessKey(KEY_PTT, true, false);
             }
@@ -1404,6 +1264,9 @@ void APP_TimeSlice10ms(void)
     if (gCurrentFunction != FUNCTION_POWER_SAVE || !gRxIdleMode)
         CheckRadioInterrupts();
 
+    MDC1200_AppTick10ms();
+    YAN_RF_Tick10ms();
+
     bool gUpdateDisplayCurrent = gUpdateDisplay;
     bool gUpdateStatusCurrent  = gUpdateStatus;
 
@@ -1421,6 +1284,10 @@ void APP_TimeSlice10ms(void)
 #else
     activeMicBarUserTransmit = gPttIsPressed;
 #endif
+#ifdef ENABLE_FEAT_F4HWN
+    if (gDualPttTxVfo != 0xFF)
+        activeMicBarUserTransmit = true;
+#endif
 
     if (gSetting_mic_bar_display != MIC_BAR_DISPLAY_OFF &&
         (gCurrentFunction == FUNCTION_TRANSMIT && activeMicBarUserTransmit) ||
@@ -1432,17 +1299,6 @@ void APP_TimeSlice10ms(void)
             if ((gFlashLightBlinkCounter % 2u) == 0u) {
                 UI_DisplayMicBarTxPopup(gUpdateDisplayCurrent);
             }
-        } else if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_BAR) {
-#if defined(ENABLE_FEAT_F4HWN_AUDIO_SCOPE)
-            /* 与移除「发射条」改动前一致：约 20ms 刷新滚动波形（细条左移） */
-            if ((gFlashLightBlinkCounter % 2u) == 0u) {
-                UI_DisplayAudioScope();
-            }
-#else
-            if ((gFlashLightBlinkCounter % 15u) == 0u) {
-                UI_DisplayAudioBar();
-            }
-#endif
         }
     }
 #endif
@@ -1564,6 +1420,10 @@ void APP_TimeSlice10ms(void)
     }
 #endif
 
+#ifdef ENABLE_FLASHLIGHT
+    Flashlight_BreathTick();
+#endif
+
     CheckKeys();
 }
 
@@ -1660,12 +1520,8 @@ void APP_TimeSlice500ms(void)
             DTMF_clear_RX();
 #endif
 
-    if (mdc1200_rx_ready_tick_500ms > 0)
-    {
-        mdc1200_rx_ready_tick_500ms--;
-        if (mdc1200_rx_ready_tick_500ms == 0)
-            gUpdateDisplay = true;
-    }
+    MDC1200_AppTick500ms();
+    YAN_RF_Tick500ms();
 
     // Skipped authentic device check
 
@@ -1824,6 +1680,7 @@ void APP_TimeSlice500ms(void)
         {
             gEeprom.KEY_LOCK = true;     // lock the keyboard
             gUpdateStatus = true;            // lock symbol needs showing
+            gUpdateDisplay = true;           // 双守底栏锁图标
         }
 
         if (exit_menu) {
@@ -2115,6 +1972,20 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         }
     }
 
+#ifdef ENABLE_FEAT_F4HWN
+    if (ACTION_DualPttEnabled() &&
+        !(gScreenToDisplay == DISPLAY_MAIN && gDTMF_InputMode))
+    {
+        const unsigned int pttKey = ACTION_DualPttSideKey();
+        if ((pttKey == 1u && Key == KEY_SIDE1) ||
+            (pttKey == 2u && Key == KEY_SIDE2))
+        {
+            ACTION_HandleSide1Ptt(bKeyPressed, bKeyHeld);
+            goto Skip;
+        }
+    }
+#endif
+
     if (Key <= KEY_9 || Key == KEY_F) {
         //if (gScanStateDir != SCAN_OFF || gCssBackgroundScan) { // FREQ/CTCSS/DCS scanning
         if (gCssBackgroundScan) { // FREQ/CTCSS/DCS scanning
@@ -2135,10 +2006,16 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         }
     }
     else if (gPttWasReleased) {
-        if (bKeyHeld)
-            bFlag = true;
-        if (!bKeyPressed) {
-            bFlag           = true;
+        /* Only consume the PTT key release that follows a physical PTT release.
+           Previously any key release was swallowed, breaking side-key shortcuts. */
+        if (Key == KEY_PTT) {
+            if (bKeyHeld)
+                bFlag = true;
+            if (!bKeyPressed) {
+                bFlag           = true;
+                gPttWasReleased = false;
+            }
+        } else if (!bKeyPressed) {
             gPttWasReleased = false;
         }
     }

@@ -203,6 +203,8 @@ extern enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
     extern uint8_t            gDW;
     extern uint8_t            gCB;
     extern bool               gSaveRxMode;
+    /* Dual PTT side-key TX VFO, 0xFF = idle. Display main stays 1 - this while active. */
+    extern uint8_t            gDualPttTxVfo;
     extern uint8_t            crc[15];
     extern uint8_t            lErrorsDuringAirCopy;
     extern uint8_t            gAircopyStep;
@@ -224,6 +226,7 @@ extern enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
 #endif
 extern uint8_t               gSetting_boot_hint; /* 0=叮咚鸡 1=魅力北京 2=五五节纪念版 */
 extern uint8_t               gSetting_boot_sound; /* 0=关 1=开 */
+extern uint8_t               gSetting_breath_led; /* 0=关 1=开 飞机灯：无信号时红绿同闪（黄） */
 extern bool                  gSetting_live_DTMF_decoder;
 extern uint8_t               gSetting_battery_text;
 
@@ -316,6 +319,7 @@ extern bool                  gDualWatchActive;
 extern volatile uint8_t      gSerialConfigCountDown_500ms;
 
 extern volatile bool         gNextTimeslice_500ms;
+extern volatile uint8_t      gBreathBeat500ms;      /* 飞机灯：ISR 实时 500ms 节拍，与休眠红灯同源 */
 
 extern volatile uint16_t     gTxTimerCountdown_500ms;
 extern volatile bool         gTxTimeoutReached;
@@ -323,7 +327,6 @@ extern volatile bool         gTxTimeoutReached;
 #ifdef ENABLE_FEAT_F4HWN
     extern volatile uint16_t gTxTimerCountdownAlert_500ms;
     extern volatile bool     gTxTimeoutReachedAlert;
-    extern volatile uint16_t gTxTimeoutToneAlert;
     #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
         extern volatile uint16_t gRxTimerCountdown_500ms;
     #endif
@@ -462,7 +465,6 @@ extern volatile uint8_t      boot_counter_10ms;
     extern uint8_t               gBacklightTimeOriginal;
     extern uint8_t               gBacklightBrightnessOld;
     extern uint8_t               gSquelchLevelOriginal;
-    extern uint8_t               gPttOnePushCounter;
     extern uint32_t              gBlinkCounter;
 
     extern uint16_t gVfoSaveCountdown_10ms;

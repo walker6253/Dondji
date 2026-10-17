@@ -121,6 +121,7 @@ enum
     MENU_PONMSG,
     MENU_BOOT_HINT,
     MENU_BOOT_SOUND,
+    MENU_BREATH,
     MENU_ROGER,
     MENU_VOL,
     MENU_BAT_TXT,
@@ -191,6 +192,9 @@ enum
     MENU_MLONG,
     MENU_BATTYP,
     MENU_MDC_ID,
+    MENU_YAN_ID,
+    MENU_YAN_ID_RX,
+    MENU_MDC_ID_RX,
     MENU_LANGUAGE
 };
 
@@ -202,7 +206,7 @@ extern const char        gSubMenu_SFT_D[3][4];
 extern const char        gSubMenu_W_N[2][7];
 extern const char        gSubMenu_OFF_ON[2][4];
 #ifdef ENABLE_AUDIO_BAR
-extern const char        gSubMenu_MIC_BAR_STYLE[3][10];
+extern const char        gSubMenu_MIC_BAR_STYLE[2][10];
 #endif
 extern const char        gSubMenu_NA[4];
 extern const char        gSubMenu_TOT[11][7];
@@ -221,8 +225,6 @@ extern const char        gSubMenu_D_RSP[4][11];
 
 #ifdef ENABLE_FEAT_F4HWN
     extern const char    gSubMenu_SET_PWR[7][6];
-    extern const char    gSubMenu_SET_PTT[2][8];
-    extern const char    gSubMenu_SET_TOT[4][7];
     extern const char    gSubMenu_SET_LCK[2][9];
     extern const char    gSubMenu_SET_MET[2][8];
     #ifdef ENABLE_FEAT_F4HWN_NARROWER
@@ -239,7 +241,7 @@ extern const char        gSubMenu_D_RSP[4][11];
 
 extern const char* const gSubMenu_PTT_ID[5];
 extern const char        gSubMenu_PONMSG[3][8];
-extern const char        gSubMenu_ROGER[3][6];
+extern const char        gSubMenu_ROGER[7][8];
 extern const char        gSubMenu_RESET[3][4];
 extern const char* const gSubMenu_F_LOCK[F_LOCK_LEN];
 extern const char        gSubMenu_RX_TX[4][6];
@@ -310,5 +312,6 @@ void UI_DisplayMenu(void);
 const char *UI_MENU_GetMenuTitle(const t_menu_item *item);
 int UI_MENU_GetCurrentMenuId();
 uint8_t UI_MENU_GetMenuIdx(uint8_t id);
+void MENU_Hex4(char *d, uint16_t v);
 
 #endif

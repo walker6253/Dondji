@@ -141,6 +141,7 @@ enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
     uint8_t       gDW = 0;
     uint8_t       gCB = 0;
     bool          gSaveRxMode = false;
+    uint8_t       gDualPttTxVfo = 0xFF;
     uint8_t       crc[15] = { 0 };
     uint8_t       lErrorsDuringAirCopy = 0;
     uint8_t       gAircopyStep = 0;
@@ -158,6 +159,7 @@ enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
 #endif
 uint8_t           gSetting_boot_hint;
 uint8_t           gSetting_boot_sound;
+uint8_t           gSetting_breath_led;
 bool              gSetting_live_DTMF_decoder;
 uint8_t           gSetting_battery_text;
 
@@ -194,6 +196,7 @@ bool              gDualWatchActive           = false;
 volatile uint8_t  gSerialConfigCountDown_500ms;
 
 volatile bool     gNextTimeslice_500ms;
+volatile uint8_t  gBreathBeat500ms;
 
 volatile uint16_t gTxTimerCountdown_500ms;
 volatile bool     gTxTimeoutReached;
@@ -201,7 +204,6 @@ volatile bool     gTxTimeoutReached;
 #ifdef ENABLE_FEAT_F4HWN
     volatile uint16_t gTxTimerCountdownAlert_500ms;
     volatile bool     gTxTimeoutReachedAlert;
-    volatile uint16_t gTxTimeoutToneAlert = 800;
     #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
         volatile uint16_t gRxTimerCountdown_500ms = 7200;  /* 0 秒显示，进入 RX 时再置 7200 */
     #endif
@@ -335,7 +337,6 @@ uint8_t           gIsLocked = 0xFF;
     uint8_t       gBacklightTimeOriginal;
     uint8_t       gBacklightBrightnessOld;
     uint8_t       gSquelchLevelOriginal = 10;
-    uint8_t       gPttOnePushCounter = 0;
     uint32_t      gBlinkCounter = 0;
 
     uint16_t gVfoSaveCountdown_10ms = 0;

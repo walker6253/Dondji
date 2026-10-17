@@ -7,7 +7,6 @@
 
 const uint8_t mdc1200_pre_amble[] = {0x00, 0x00, 0x00};
 const uint8_t mdc1200_sync[5] = {0x07, 0x09, 0x2a, 0x44, 0x6f};
-const uint8_t mdc1200_sync_suc_xor[5] = {0xfb, 0x72, 0x40, 0x99, 0xa7};
 
 uint16_t gMDC1200_ID = 0x0000;
 
@@ -215,14 +214,14 @@ bool MDC1200_process_rx_data(
 
             rx.bit = (rx_byte >> bit) & 1u;
 
-            rx.xor_bit = (rx.xor_bit ^ rx.bit ^ 1u) & 1u;
+            rx.xor_bit = (rx.xor_bit ^ rx.bit) & 1u;
 
             rx.shift_reg = (rx.shift_reg << 1) | rx.xor_bit;
             rx.bit_count++;
 
             if (rx.stage == 0) {
 
-                const unsigned int sync_bit_ok_threshold = 32;
+                const unsigned int sync_bit_ok_threshold = 30;
 
                 if (rx.bit_count >= 40) {
                     uint64_t sync_nor = 0x07092a446fu;
@@ -283,14 +282,6 @@ bool MDC1200_process_rx_data(
     return false;
 }
 
-uint8_t mdc1200_rx_buffer[sizeof(mdc1200_sync_suc_xor) + (MDC1200_FEC_K * 2)];
-unsigned int mdc1200_rx_buffer_index = 0;
-
-uint8_t mdc1200_op;
-uint8_t mdc1200_arg;
-uint16_t mdc1200_unit_id;
-uint8_t mdc1200_rx_ready_tick_500ms;
-
 void MDC1200_init(void) {
     MDC1200_reset_rx();
     MDC1200_LoadID();
@@ -318,5 +309,5 @@ void MDC1200_SendPTTID(void)
     unsigned int size;
 
     size = MDC1200_encode_single_packet(packet, MDC1200_OP_CODE_PTT_ID, 0x80, gMDC1200_ID);
-    BK4819_PlayMDC1200(packet, size, true);
+    BK4819_PlayMDC1200(packet, size);
 }

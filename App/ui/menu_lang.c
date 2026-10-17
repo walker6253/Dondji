@@ -62,6 +62,7 @@ const char *UI_MENU_GetMenuTitle(const t_menu_item *item)
     case MENU_PONMSG:       return "\xe5\xbc\x80\xe6\x9c\xba\xe7\x94\xbb\xe9\x9d\xa2";
     case MENU_BOOT_HINT:    return "\xe5\xbc\x80\xe6\x9c\xba\xe6\x8f\x90\xe7\xa4\xba";
     case MENU_BOOT_SOUND:   return "\xe5\xbc\x80\xe6\x9c\xba\xe9\x9f\xb3\xe6\x95\x88";
+    case MENU_BREATH:       return "\xe9\xa3\x9e\xe6\x9c\xba\xe7\x81\xaf"; /* 飞机灯 */
     case MENU_ABR:          return "\xe8\x83\x8c\xe5\x85\x89\xe6\x97\xb6\xe9\x97\xb4";
     case MENU_ABR_MIN:      return "\xe8\x83\x8c\xe5\x85\x89\xe6\x9c\x80\xe6\x9a\x97";
     case MENU_ABR_MAX:      return "\xe8\x83\x8c\xe5\x85\x89\xe6\x9c\x80\xe4\xba\xae";
@@ -71,6 +72,10 @@ const char *UI_MENU_GetMenuTitle(const t_menu_item *item)
     case MENU_VOICE:        return "\xe8\xaf\xad\xe9\x9f\xb3";
 #endif
     case MENU_ROGER:        return "\xe5\x8f\x91\xe5\xb0\x84\xe5\xb0\xbe\xe9\x9f\xb3";
+    case MENU_MDC_ID:       return "MDC ID";
+    case MENU_YAN_ID:       return "Yan ID";
+    case MENU_YAN_ID_RX:    return "\xe6\x8e\xa5\xe6\x94\xb6 Yan ID"; /* 接收 Yan ID */
+    case MENU_MDC_ID_RX:    return "接收MDC ID";
     case MENU_STE:          return "\xe5\xb0\xbe\xe9\x9f\xb3\xe6\xb6\x88\xe9\x99\xa4";
     case MENU_RP_STE:       return "过中继尾音消除";
     case MENU_1_CALL:       return "按键即呼";

@@ -20,6 +20,7 @@
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
 #endif
+#include "app/mdc1200_app.h"
 #include "board.h"
 #include "py32f071_ll_bus.h"
 #include "py32f071_ll_gpio.h"
@@ -166,6 +167,18 @@ void BOARD_ADC_Init(void)
 
 void BOARD_ADC_GetBatteryInfo(uint16_t *pVoltage, uint16_t *pCurrent)
 {
+    /* MDC1200 软接收采样期间 ADC 处于 TIM3 外部触发模式, SW 触发的
+       电池采样会死等 EOS → 跳过本次采样, 沿用上次读数 */
+    static uint16_t s_mdc_gated_voltage;
+    static uint16_t s_mdc_gated_current;
+
+    if (MDC1200_AppRxSampling())
+    {
+        *pVoltage = s_mdc_gated_voltage;
+        *pCurrent = s_mdc_gated_current;
+        return;
+    }
+
     LL_ADC_REG_StartConversionSWStart(ADC1);
     while (!LL_ADC_IsActiveFlag_EOS(ADC1))
         ;
@@ -173,6 +186,9 @@ void BOARD_ADC_GetBatteryInfo(uint16_t *pVoltage, uint16_t *pCurrent)
 
     *pVoltage = LL_ADC_REG_ReadConversionData12(ADC1);
     *pCurrent = 0;
+
+    s_mdc_gated_voltage = *pVoltage;
+    s_mdc_gated_current = *pCurrent;
 }
 
 void BOARD_Init(void)

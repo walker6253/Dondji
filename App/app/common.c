@@ -27,6 +27,8 @@ void COMMON_KeypadLockToggle()
             gLockConfirmCountdown = 100;   // 1秒弹窗
 
         gRequestSaveSettings = true;
+        gUpdateDisplay = true;
+        gUpdateStatus = true;
     }
 }
 

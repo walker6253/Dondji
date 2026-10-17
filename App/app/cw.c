@@ -20,6 +20,7 @@
 
 
 #include "app/cw.h"
+#include "app/mdc1200_app.h"
 #include "keyboard_state.h"
 #include "../driver/bk4819.h"
 #include "../driver/gpio.h"
@@ -222,6 +223,9 @@ static bool HandleInput(void)
 
 void APP_RunCW(void)
 {
+    /* CW为独立循环(冻结主tick): 入口先停 MDC1200 软接收采样 */
+    MDC1200_AppDisableRx();
+
     BACKLIGHT_UpdateTickless();
 
     // Fully initialize buffers

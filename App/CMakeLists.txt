@@ -25,6 +25,10 @@ target_sources(App INTERFACE
     app/main.c
     app/menu.c
     app/mdc1200.c
+    app/mdc1200_app.c
+    app/mdc_addrbook.c
+    app/yan_id_packet.c
+    app/yan_id_rf.c
     app/scanner.c
     audio.c
     bitmaps.c
@@ -220,8 +224,6 @@ endif()
 
 enable_feature(ENABLE_FEAT_F4HWN)
 enable_feature(ENABLE_FEAT_F4HWN_GAME
-    app/mokuyu.c
-    app/toolbox_menu.c
     app/cw.c
 )
 enable_feature(ENABLE_FEAT_F4HWN_SCREENSHOT 

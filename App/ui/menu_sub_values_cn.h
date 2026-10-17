@@ -22,7 +22,7 @@ extern const char gSubMenu_D_RSP_CN[][11];
 extern const char *const gSubMenu_PTT_ID_CN[];
 extern const char gSubMenu_PONMSG_CN[][10];
 extern const char *const gSubMenu_BOOT_HINT_CN[];
-extern const char gSubMenu_ROGER_CN[][6];
+extern const char *const gSubMenu_ROGER_CN[];
 extern const char gSubMenu_RESET_CN[][8];
 extern const char *const gSubMenu_F_LOCK_CN[];
 extern const char gSubMenu_RX_TX_CN[][16];
@@ -45,8 +45,6 @@ extern const char gSubMenu_TXP_CN[][6];
 
 #ifdef ENABLE_FEAT_F4HWN
 extern const char gSubMenu_SET_PWR_CN[][6];
-extern const char gSubMenu_SET_PTT_CN[][8];
-extern const char gSubMenu_SET_TOT_CN[][7];
 extern const char gSubMenu_SET_LCK_CN[][12];
 extern const char gSubMenu_SET_MET_CN[][8];
 # ifdef ENABLE_FEAT_F4HWN_AUDIO

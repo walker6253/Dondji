@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "app/dtmf.h"
+#include "app/action.h"
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
 #endif
@@ -27,6 +28,7 @@
 #include "driver/py25q16.h"
 #include "driver/st7565.h"
 #include "driver/system.h"
+#include "frequencies.h"
 #include "misc.h"
 #include "settings.h"
 #include "ui/helper.h"
@@ -84,16 +86,23 @@ void SETTINGS_InitEEPROM(void)
 
             PY25Q16_WriteBuffer(0x00A158, displayByte, sizeof(displayByte));
 
-            // 4. Reset logo lines (clear to null for strlen() == 0)
+            // 4. Reset logo lines + migrate Yan ID 0x00A0C8 → 0x00A088
 
             char logoLines[32];
             PY25Q16_ReadBuffer(0x00A0C8, logoLines, sizeof(logoLines));
 
             bool needsWrite = false;
 
+            // Migrate Yan ID: copy first 8 bytes of logo text (old yan_id) to 0x00A088
+            if (logoLines[0] > ' ' && logoLines[0] < 0x7F) {
+                PY25Q16_WriteBuffer(0x00A088, logoLines, 8);
+                logoLines[0] = 0;
+                needsWrite = true;
+            }
+
             for (int line = 0; line < 2; line++) {
                 int offset = line * 16;
-                
+
                 for (int i = 0; i < 16; i++) {
                     char c = logoLines[offset + i];
                     if (c == 0) {
@@ -255,6 +264,9 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     gEeprom.KEY_2_SHORT_PRESS_ACTION     = (Data[3] < ACTION_OPT_LEN) ? Data[3] : ACTION_OPT_SCAN;
     gEeprom.KEY_2_LONG_PRESS_ACTION      = (Data[4] < ACTION_OPT_LEN) ? Data[4] : ACTION_OPT_NONE;
     gEeprom.SCAN_RESUME_MODE             = (Data[5] < 105)            ? Data[5] : 14;
+#ifdef ENABLE_FEAT_F4HWN
+    ACTION_SyncDualPttKeyActions();
+#endif
     gEeprom.AUTO_KEYPAD_LOCK             = (Data[6] < 41)             ? Data[6] : 0;
     gEeprom.POWER_ON_DISPLAY_MODE        = (Data[7] < 3)              ? Data[7] : POWER_ON_DISPLAY_MODE_DEFAULT;
 
@@ -278,7 +290,8 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     {
         uint8_t bootSound = 1; // default: ON
         PY25Q16_ReadBuffer(0x00A174, &bootSound, 1);
-        gSetting_boot_sound = (bootSound < 2) ? bootSound : 1;
+        gSetting_boot_sound = (bootSound & 1u) ? 1u : 0u;
+        gSetting_breath_led = (bootSound >> 1) & 1u;
     }
     #ifdef ENABLE_RSSI_BAR
         for (uint8_t i = 0; i < 7; i++) {
@@ -293,10 +306,18 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     #ifdef ENABLE_ALARM
         gEeprom.ALARM_MODE                 = (Data[0] <  2) ? Data[0] : true;
     #endif
-    gEeprom.ROGER                          = (Data[1] <  3) ? Data[1] : ROGER_MODE_OFF;
+    gEeprom.ROGER                          = (Data[1] <= ROGER_MODE_CUSTOM3) ? Data[1] : ROGER_MODE_OFF;
     gEeprom.REPEATER_TAIL_TONE_ELIMINATION = (Data[2] < 11) ? Data[2] : 0;
     gEeprom.TX_VFO                         = (Data[3] <  2) ? Data[3] : 0;
     gEeprom.BATTERY_TYPE                   = (Data[4] < BATTERY_TYPE_UNKNOWN) ? Data[4] : BATTERY_TYPE_1600_MAH;
+
+    // Yan ID + receive flags at 0x00A088 (migrated from 0x00A0C8 to avoid Logo text conflict)
+    PY25Q16_ReadBuffer(0x00A088, Data, 8);
+    memset(gEeprom.yan_id, 0, sizeof(gEeprom.yan_id));
+    if (Data[0] > ' ' && Data[0] < 0x7F)
+        memcpy(gEeprom.yan_id, Data, YAN_ID_LEN);
+    gEeprom.yan_id_rx = (Data[7] == 1);
+    gEeprom.mdc_id_rx = (Data[6] == 1);
 
     // 0ED0..0ED7
     PY25Q16_ReadBuffer(0x00A0A8 + 0x40, Data, 8);
@@ -417,7 +438,7 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
                 else if (mic_pair == 1u)
                     gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP;
                 else if (mic_pair == 2u)
-                    gSetting_mic_bar_display = MIC_BAR_DISPLAY_BAR;
+                    gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP; /* BAR retired */
                 else
                     gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP;
             }
@@ -461,25 +482,49 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     // Init list name
     PY25Q16_ReadBuffer(0x00880E, gListName, sizeof(gListName));
 
-    // Init attr cache
-    MR_InitChannelAttributesCache();
+    // Load and check channel（整区批量处理，替代原 1031 次逐槽属性 Flash 写回）
+    //
+    // 1) 0xFFFF → 0x0007（band=7 无效标记，与旧版归一化一致）
+    // 2) 清除 exclude 位（扫描排除是会话级标志，每次开机复位）
+    // 3) 非 0xFFFF 的 MR 槽校验 MR 块 RX 频率：超出 BK4819 硬件范围
+    //    （1.8–1300MHz，含 630–840MHz 盲区）的 Flash 残留标记为未用，
+    //    避免乱码信道显示
+    //
+    // 写驱动对相同数据自动跳过擦写（memcmp 保护），稳态开机零磨损；
+    // 有变化时仅一次整区擦写（原版为每个变动槽各一次 4KB 扇区擦写）。
+    //
+    // 注意：必须先于 MR_InitChannelAttributesCache() 执行——缓存会预载
+    // 信道 0/1/2，若清理在其后进行，缓存中是清理前的旧值。
+    {
+        uint16_t attrBuf[MR_CHANNELS_MAX + 7];
+        uint16_t *p = attrBuf;
 
-    // Load and check channel
-    for (uint16_t i = 0; i < MR_CHANNELS_MAX + 7; i++) {
-        ChannelAttributes_t *att = MR_GetChannelAttributes(i);
-        
-        if (att != NULL) {
-            if (att->__val == 0xFFFF) {
-                att->__val = 0;
-                att->band = 0x7;
-                MR_SetChannelAttributes(i, att);  // ⭐ IMPORTANT: Sauvegarder!
+        PY25Q16_ReadBuffer(0x008000, attrBuf, sizeof(attrBuf));
+
+        // addr 同时充当 MR 块地址与索引：addr < 0x4000 即 MR 槽，
+        // addr ≥ 0x4000 的 7 项为 VFO 属性（不读 MR 块）
+        for (uint32_t addr = 0; addr < (MR_CHANNELS_MAX + 7) * 16u; addr += 16, p++)
+        {
+            int16_t v = *(const int16_t *)p;   // 有符号读取：v == -1 即 0xFFFF 擦除态
+
+            if (v == -1)
+                v = 0x0007;
+            else if ((addr >> 14) == 0)   // addr < 0x4000：MR 槽（位测试省指令）
+            {
+                uint32_t Frequency;
+                PY25Q16_ReadBuffer(addr, &Frequency, sizeof(Frequency));
+                if (RX_freq_check(Frequency) != 0)
+                    v = 0x0007;
             }
-            else {
-                att->exclude = 0;
-                MR_SetChannelAttributes(i, att);  // ⭐ IMPORTANT: Sauvegarder!
-            }
+
+            *p = (uint16_t)v & ~0x0080;        // 清除 exclude 位
         }
+
+        PY25Q16_WriteBuffer(0x008000, attrBuf, sizeof(attrBuf));
     }
+
+    // Init attr cache（在信道清理之后预载，确保缓存为清理后的干净数据）
+    MR_InitChannelAttributesCache();
 
     // 0F30..0F3F
     PY25Q16_ReadBuffer(0x00A138, gCustomAesKey, sizeof(gCustomAesKey));
@@ -1016,6 +1061,8 @@ void SETTINGS_SaveSettings(void)
     State[3] = gEeprom.TX_VFO;
     State[4] = gEeprom.BATTERY_TYPE;
 
+    // 0x0EB0 — reserved (Yan ID moved to 0x00A088; Logo text owns 0x00A0C8 now)
+
     // 0x0ED0
     State = SecBuf + 0x40;
     State[0] = gEeprom.DTMF_SIDE_TONE;
@@ -1038,6 +1085,12 @@ void SETTINGS_SaveSettings(void)
 #endif
 
     PY25Q16_WriteBuffer(0x00A0A8, SecBuf, 0x50);
+
+    // Yan ID at 0x00A088
+    memcpy(SecBuf, gEeprom.yan_id, YAN_ID_LEN);
+    SecBuf[6] = gEeprom.mdc_id_rx ? 1 : 0;
+    SecBuf[7] = gEeprom.yan_id_rx ? 1 : 0;
+    PY25Q16_WriteBuffer(0x00A088, SecBuf, 8);
 
     // -------------------------
     // 0f18 - 0f20
@@ -1095,7 +1148,7 @@ void SETTINGS_SaveSettings(void)
             if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_POPUP)
                 State[7] |= (1u << 4);
             else if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_BAR)
-                State[7] |= (2u << 4);
+                State[7] |= (1u << 4); /* BAR retired — persist as popup */
         #else
             if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_OFF)
                 State[7] &= ~(1u << 4);
@@ -1183,8 +1236,8 @@ void SETTINGS_SaveSettings(void)
         PY25Q16_WriteBuffer(0x00A170, langHint, sizeof(langHint));
     }
     {
-        uint8_t bootSound = (gSetting_boot_sound < 2) ? gSetting_boot_sound : 1;
-        PY25Q16_WriteBuffer(0x00A174, &bootSound, 1);
+        uint8_t v = (uint8_t)((gSetting_boot_sound & 1u) | ((gSetting_breath_led & 1u) << 1));
+        PY25Q16_WriteBuffer(0x00A174, &v, 1);
     }
 }
 
@@ -1515,8 +1568,11 @@ static void SETTINGS_LegacyMigrationReadCnSlot(char *s, uint16_t channel)
 }
 
 /*
- * 一次性迁移：仅当旧区某信道存在「有效非空」中文名时，才写入统一区 (0x004000)。
- * 若无中文名则不写，保留原英文。完成后擦除旧区。
+ * One-shot migration: copy valid non-empty legacy CN names from 0x020000
+ * into the unified name area (0x004000). English names already stored there
+ * are left untouched when no legacy CN name exists. Then erase the legacy
+ * 16 KB. After this runs, nothing in firmware uses 0x020000..0x023FFF again
+ * (see settings.h / help.zh.md — region can be reclaimed later).
  */
 static bool SETTINGS_LegacyCnFlashRegionIsBlank(void)
 {

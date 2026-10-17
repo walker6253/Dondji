@@ -169,14 +169,11 @@ void     BK4819_PrepareFSKReceive(void);
 
 void     BK4819_PlayRoger(void);
 
-void     BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size, const bool long_preamble);
-void     BK4819_EnableMDC1200Rx(void);
-void     BK4819_DisableMDC1200Rx(void);
-bool     BK4819_ReadMDC1200RxBuffer(uint8_t *data, unsigned int *size);
+void     BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size);
+/* MDC1200 RX 为软件FFSK解调(mdc1200_app.c), 无硬件 FSK RX 启停接口 */
 
 void     BK4819_Enable_AfDac_DiscMode_TxDsp(void);
 
-void     BK4819_GetVoxAmp(uint16_t *pResult);
 void     BK4819_SetScrambleFrequencyControlWord(uint32_t Frequency);
 void     BK4819_PlayDTMFEx(bool bLocalLoopback, char Code);
 

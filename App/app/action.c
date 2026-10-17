@@ -20,6 +20,7 @@
 #include "app/action.h"
 #include "app/app.h"
 #include "app/chFrScanner.h"
+#include "app/generic.h"
 #include "app/common.h"
 #include "app/dtmf.h"
 #ifdef ENABLE_FLASHLIGHT
@@ -38,6 +39,7 @@
 #endif
 #include "driver/bk4819.h"
 #include "driver/gpio.h"
+#include "driver/keyboard.h"
 #include "driver/backlight.h"
 #include "functions.h"
 #include "misc.h"
@@ -59,6 +61,10 @@ inline static void ACTION_1750() { ACTION_AlarmOr1750(true); };
 #endif
 
 inline static void ACTION_ScanRestart() { ACTION_Scan(true); };
+
+#ifdef ENABLE_FEAT_F4HWN
+static void ACTION_Update(void);
+#endif
 
 void (*action_opt_table[])(void) = {
     [ACTION_OPT_NONE] = &FUNCTION_NOP,
@@ -352,6 +358,15 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         return;
     }
 
+#ifdef ENABLE_FEAT_F4HWN
+    /* Side-key dual PTT stays assigned but is inactive while MAIN ONLY. */
+    if ((Key == KEY_SIDE1 || Key == KEY_SIDE2) && func == ACTION_OPT_PTT && ACTION_IsMainOnlyMode()) {
+        if (!(bKeyHeld && !bKeyPressed))
+            gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+        return;
+    }
+#endif
+
     // held or released beyond this point
 
     if(!(bKeyHeld && !bKeyPressed)) // don't beep on released after hold
@@ -359,6 +374,15 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
     if (bKeyHeld && !bKeyPressed) // button released after hold
     {
+#ifdef ENABLE_FEAT_F4HWN
+        if (func == ACTION_OPT_PTT) {
+            if (gCurrentFunction == FUNCTION_TRANSMIT) {
+                GENERIC_Key_PTT(false);
+                gPttIsPressed = false;
+                ACTION_Update();
+            }
+        }
+#endif
         return;
     }
 
@@ -531,11 +555,72 @@ void ACTION_BlminTmpOff(void)
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN
-void ACTION_Update(void)
+static void ACTION_Update(void)
 {
     gSaveRxMode          = false;
     gFlagReconfigureVfos = true;
     gUpdateStatus        = true;
+}
+
+void ACTION_DualPttStop(void)
+{
+    if (gDualPttTxVfo == 0xFF)
+        return;
+
+    const uint8_t side = gDualPttTxVfo;
+    gDualPttTxVfo = 0xFF;
+
+    if (gCurrentFunction == FUNCTION_TRANSMIT)
+        GENERIC_Key_PTT(false);
+
+    /* Keep RX on side (RF already there); pin display main on top. */
+    gEeprom.TX_VFO = (uint8_t)(1u - side);
+    gTxVfo = &gEeprom.VfoInfo[gEeprom.TX_VFO];
+    gCurrentVfo = gRxVfo;
+    /* Clear so the next main PTT does not inherit the side RX VFO
+     * during the dual-watch hold after side-key TX. */
+    gRxVfoIsActive = false;
+    gUpdateDisplay = true;
+}
+
+void ACTION_ClearSide1PttIfMainOnly(void)
+{
+    if (!ACTION_IsMainOnlyMode())
+        return;
+    /* Keep side-key PTT assignment so dual-watch return still has side PTT.
+     * Presses are gated by ACTION_DualPttEnabled / ACTION_Handle. */
+    ACTION_DualPttStop();
+}
+
+void ACTION_SyncDualPttKeyActions(void)
+{
+    /* MENU long never dual-PTT */
+    if (gEeprom.KEY_M_LONG_PRESS_ACTION == ACTION_OPT_PTT)
+        gEeprom.KEY_M_LONG_PRESS_ACTION = ACTION_OPT_NONE;
+
+    ACTION_ClearSide1PttIfMainOnly();
+
+    const bool k1 = (gEeprom.KEY_1_SHORT_PRESS_ACTION == ACTION_OPT_PTT ||
+                     gEeprom.KEY_1_LONG_PRESS_ACTION  == ACTION_OPT_PTT);
+    const bool k2 = (gEeprom.KEY_2_SHORT_PRESS_ACTION == ACTION_OPT_PTT ||
+                     gEeprom.KEY_2_LONG_PRESS_ACTION  == ACTION_OPT_PTT);
+
+    /* Prefer side key 1 if both keys somehow carry PTT. */
+    if (k1) {
+        gEeprom.KEY_1_SHORT_PRESS_ACTION = ACTION_OPT_PTT;
+        gEeprom.KEY_1_LONG_PRESS_ACTION  = ACTION_OPT_PTT;
+        if (gEeprom.KEY_2_SHORT_PRESS_ACTION == ACTION_OPT_PTT)
+            gEeprom.KEY_2_SHORT_PRESS_ACTION = ACTION_OPT_NONE;
+        if (gEeprom.KEY_2_LONG_PRESS_ACTION == ACTION_OPT_PTT)
+            gEeprom.KEY_2_LONG_PRESS_ACTION = ACTION_OPT_NONE;
+        gSetting_set_ptt = 0;
+        gSetting_set_ptt_session = 0;
+    } else if (k2) {
+        gEeprom.KEY_2_SHORT_PRESS_ACTION = ACTION_OPT_PTT;
+        gEeprom.KEY_2_LONG_PRESS_ACTION  = ACTION_OPT_PTT;
+        gSetting_set_ptt = 0;
+        gSetting_set_ptt_session = 0;
+    }
 }
 
 void ACTION_RxMode(void)
@@ -553,6 +638,7 @@ void ACTION_RxMode(void)
 #endif
 
     cycle = !cycle;
+    ACTION_ClearSide1PttIfMainOnly();
     ACTION_Update();
     /* SETTINGS_SaveSettings uses gDW/gCB when !gSaveRxMode; keep them in sync after side-key Rx mode change */
     gDW = gEeprom.DUAL_WATCH;
@@ -600,6 +686,7 @@ void ACTION_MainOnly(void)
         }
     }
 
+    ACTION_ClearSide1PttIfMainOnly();
     ACTION_Update();
     gDW = gEeprom.DUAL_WATCH;
     gCB = gEeprom.CROSS_BAND_RX_TX;
@@ -621,11 +708,75 @@ void ACTION_RxA(void)
 }
 #endif
 
+/* Side-key PTT must obey the same lock as hardware PTT when lock range includes PTT. */
+static bool ACTION_SidePttLocked(void)
+{
+    return gEeprom.KEY_LOCK && gSetting_set_lck && gCurrentFunction != FUNCTION_TRANSMIT;
+}
+
+static void ACTION_SidePttLockFeedback(void)
+{
+    AUDIO_PlayBeep(BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL);
+    gKeypadLocked  = 4;
+    gUpdateDisplay = true;
+}
+
 void ACTION_Ptt(void)
 {
-    gSetting_set_ptt_session = !gSetting_set_ptt_session;
+    if (gCurrentFunction == FUNCTION_TRANSMIT) {
+        GENERIC_Key_PTT(false);
+        gPttIsPressed = false;
+    } else {
+        if (ACTION_SidePttLocked()) {
+            ACTION_SidePttLockFeedback();
+            return;
+        }
+        gPttIsPressed = true;
+        GENERIC_Key_PTT(true);
+    }
 
     ACTION_Update();
+}
+
+void ACTION_HandleSide1Ptt(bool bKeyPressed, bool bKeyHeld)
+{
+    if (SerialConfigInProgress())
+        return;
+    if (bKeyHeld && bKeyPressed)
+        return;
+
+    if (bKeyPressed) {
+        if (ACTION_SidePttLocked()) {
+            ACTION_SidePttLockFeedback();
+            return;
+        }
+
+        if (GPIO_IsPttPressed() || gDualPttTxVfo != 0xFF)
+            return;
+
+        /* Bottom / other channel. Keep gCurrentVfo pinned there:
+         * RADIO_PrepareTX keeps the previous RX VFO when gRxVfoIsActive,
+         * which made side-key TX use the main channel. */
+        const uint8_t side = (uint8_t)(1u - gEeprom.TX_VFO);
+        gDualPttTxVfo   = side;
+        gEeprom.TX_VFO  = side;
+        gEeprom.RX_VFO  = side;
+        gTxVfo = gRxVfo = gCurrentVfo = &gEeprom.VfoInfo[side];
+        gRxVfoIsActive  = false;
+        gDualWatchActive = false;
+
+        GENERIC_Key_PTT(true);
+        if (gFlagPrepareTX) {
+            RADIO_PrepareTX();
+            gFlagPrepareTX = false;
+            gTxVfo = gCurrentVfo = &gEeprom.VfoInfo[side];
+        }
+        gUpdateDisplay = true;
+        return;
+    }
+
+    if (gDualPttTxVfo != 0xFF && !GPIO_IsPttPressed())
+        ACTION_DualPttStop();
 }
 
 void ACTION_Wn(void)

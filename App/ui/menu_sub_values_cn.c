@@ -2,6 +2,7 @@
 
 #include "misc.h"
 #include "radio.h"
+#include "ui/menu.h"
 #include "ui/menu_sub_values_cn.h"
 
 #ifdef ENABLE_CHINESE
@@ -14,7 +15,6 @@ const char gSubMenu_OFF_ON_CN[][4] = {
 #ifdef ENABLE_AUDIO_BAR
 const char gSubMenu_MIC_BAR_STYLE_CN[][10] = {
     "\xe5\x85\xb3\xe9\x97\xad",             /* 关闭 */
-    "\xe6\x9d\xa1\xe5\xbd\xa2",             /* 条形 */
     "\xe5\xbc\xb9\xe7\xaa\x97",             /* 弹窗 */
 };
 #endif
@@ -73,10 +73,14 @@ const char *const gSubMenu_BOOT_HINT_CN[] = {
     "\xe4\xba\x94\xe4\xba\x94\xe8\x8a\x82\xe7\xba\xaa\xe5\xbf\xb5\xe7\x89\x88",
 };
 
-const char gSubMenu_ROGER_CN[][6] = {
-    "\xe5\x85\xb3",
-    "ROGER",
-    "MDC",
+const char *const gSubMenu_ROGER_CN[] = {
+    "\xe5\x85\xb3", /* 关 — 与英文串共享其余项 */
+    gSubMenu_ROGER[1],
+    gSubMenu_ROGER[2],
+    gSubMenu_ROGER[3],
+    gSubMenu_ROGER[4],
+    gSubMenu_ROGER[5],
+    gSubMenu_ROGER[6],
 };
 
 const char gSubMenu_RESET_CN[][8] = {
@@ -174,18 +178,6 @@ const char gSubMenu_SET_PWR_CN[][6] = {
     "1",
     "2",
     "5",
-};
-
-const char gSubMenu_SET_PTT_CN[][8] = {
-    "\xe7\xbb\x8f\xe5\x85\xb8",
-    "\xe4\xb8\x80\xe9\x94\xae",
-};
-
-const char gSubMenu_SET_TOT_CN[][7] = {
-    "\xe5\x85\xb3",
-    "\xe5\xa3\xb0\xe9\x9f\xb3",
-    "\xe8\xa7\x86\xe8\xa7\x89",
-    "\xe5\x85\xa8\xe9\x83\xa8",
 };
 
 const char gSubMenu_SET_LCK_CN[][12] = {

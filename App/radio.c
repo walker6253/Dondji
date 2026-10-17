@@ -19,7 +19,10 @@
 
 #include "am_fix.h"
 #include "app/dtmf.h"
+#include "app/flashlight.h"
 #include "app/mdc1200.h"
+#include "app/mdc1200_app.h"
+#include "app/yan_id_rf.h"
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
 #endif
@@ -821,7 +824,15 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
     gEnableSpeaker = false;
 
-    BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+#ifdef ENABLE_FLASHLIGHT
+    /* 飞机灯 ON 相位时勿灭红/绿，否则双守每 100ms 轮询会把灯掐断成虚接闪烁 */
+    const bool breath_owns_leds = Flashlight_BreathLedsOn();
+#else
+    const bool breath_owns_leds = false;
+#endif
+
+    if (!breath_owns_leds)
+        BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
 
     if (gRxVfo->Modulation == MODULATION_AM)
         BK4819_SetFilterBandwidth(RADIO_GetAMFilterBandwidth(gRxVfo), true);
@@ -845,7 +856,8 @@ void RADIO_SetupRegisters(bool switchToForeground)
         }
     }
 
-    BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
+    if (!breath_owns_leds)
+        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
 
     BK4819_SetupPowerAmplifier(0, 0);
 
@@ -992,11 +1004,14 @@ void RADIO_SetupRegisters(bool switchToForeground)
     BK4819_EnableDTMF();
     InterruptMask |= BK4819_REG_3F_DTMF_5TONE_FOUND;
 
-    BK4819_DisableMDC1200Rx();
+    YAN_RF_DisableRx();
 
-    if (gEeprom.ROGER == ROGER_MODE_MDC)
+    /* MDC1200 RX 为软件FFSK解调(PA4采鉴频音频), 不占用FSK modem/中断,
+       TX 侧 PlayMDC1200 自行恢复 REG_58/70 — 无需硬件 RX 拆除;
+       仅 Yan ID RX 需要硬件FSK RX 中断 */
+    if (YAN_RF_ReceiveEnabled())
     {
-        BK4819_EnableMDC1200Rx();
+        YAN_RF_EnableRx();
         InterruptMask |= BK4819_REG_3F_FSK_RX_SYNC | BK4819_REG_3F_FSK_RX_FINISHED | BK4819_REG_3F_FSK_FIFO_ALMOST_FULL;
     }
 

@@ -24,8 +24,9 @@
 
 #include "audio.h"
 #include "app/mdc1200.h"
-
-#include "driver/bk4819.h"
+#include "app/mdc1200_app.h"
+#include "app/yan_id_rf.h"
+#include "audio.h"
 #include "driver/gpio.h"
 #include "driver/system.h"
 #include "driver/systick.h"
@@ -33,8 +34,6 @@
 #define PIN_CSN GPIO_MAKE_PIN(GPIOF, LL_GPIO_PIN_9)
 #define PIN_SCL GPIO_MAKE_PIN(GPIOB, LL_GPIO_PIN_8)
 #define PIN_SDA GPIO_MAKE_PIN(GPIOB, LL_GPIO_PIN_9)
-
-static const uint16_t FSK_RogerTable[7] = {0xF1A2, 0x7446, 0x61A4, 0x6544, 0x4E8A, 0xE044, 0xEA84};
 
 static uint16_t gBK4819_GpioOutState;
 
@@ -857,15 +856,15 @@ void BK4819_RX_TurnOn(void)
 
 void BK4819_PickRXFilterPathBasedOnFrequency(uint32_t Frequency)
 {
-    if (Frequency < 28000000)
-    {   // VHF
+    if (Frequency == 0xFFFFFFFF)
+    {   // SCAN: VHF first (hardware freq-scan does not touch REG_33)
         BK4819_ToggleGpioOut(BK4819_GPIO4_PIN32_VHF_LNA, true);
         BK4819_ToggleGpioOut(BK4819_GPIO3_PIN31_UHF_LNA, false);
     }
     else
-    if (Frequency == 0xFFFFFFFF)
-    {   // OFF
-        BK4819_ToggleGpioOut(BK4819_GPIO4_PIN32_VHF_LNA, false);
+    if (Frequency < 28000000)
+    {   // VHF
+        BK4819_ToggleGpioOut(BK4819_GPIO4_PIN32_VHF_LNA, true);
         BK4819_ToggleGpioOut(BK4819_GPIO3_PIN31_UHF_LNA, false);
     }
     else
@@ -1774,53 +1773,44 @@ static void BK4819_PlayRogerNormal(void)
     BK4819_WriteRegister(BK4819_REG_30, 0xC3FE);   // 1 1 0000 1 1 1111 1 1 1 0 (启用AF_DAC)
 }
 
+/* Custom1/2/3 — exact Syrup timings. uint16 triplets: (Hz, on_ms, off_ms). */
+static const uint16_t gRogerSeq_Custom[] = {
+    1975, 80, 10,  2100, 100, 10,  3140, 80, 10,  2800, 100, 10,
+    430, 350, 350,  430, 350, 350,  430, 350, 0,
+    1650, 40, 0,  1100, 50, 0,  750, 65, 0
+};
 
-void BK4819_PlayRogerMDC(void)
+static const uint8_t gRogerSeqOff[3] = {0, 12, 21};
+static const uint8_t gRogerSeqLen[3] = {4, 3, 3};
+
+static void BK4819_PlayRogerSequence(const uint16_t *p, uint8_t n)
 {
-    struct reg_value {
-        BK4819_REGISTER_t reg;
-        uint16_t value;
-    };
+    bool first = true;
 
-    struct reg_value RogerMDC_Configuration [] = {
-        { BK4819_REG_58, 0x37C3 },  // FSK Enable,
-                                        // RX Bandwidth FFSK 1200/1800
-                                        // 0xAA or 0x55 Preamble
-                                        // 11 RX Gain,
-                                        // 101 RX Mode
-                                        // TX FFSK 1200/1800
-        { BK4819_REG_72, 0x3065 },  // Set Tone-2 to 1200Hz
-        { BK4819_REG_70, 0x00E0 },  // Enable Tone-2 and Set Tone2 Gain
-        { BK4819_REG_5D, 0x0D00 },  // Set FSK data length to 13 bytes
-        { BK4819_REG_59, 0x8068 },  // 4 byte sync length, 6 byte preamble, clear TX FIFO
-        { BK4819_REG_59, 0x0068 },  // Same, but clear TX FIFO is now unset (clearing done)
-        { BK4819_REG_5A, 0x5555 },  // First two sync bytes
-        { BK4819_REG_5B, 0x55AA },  // End of sync bytes. Total 4 bytes: 555555aa
-        { BK4819_REG_5C, 0xAA30 },  // Disable CRC
-    };
+    while (n--) {
+        if (first) {
+            first = false;
+            BK4819_TransmitTone(false, p[0]);
+        } else {
+            BK4819_WriteRegister(BK4819_REG_71, scale_freq(p[0]));
+            BK4819_ExitTxMute();
+        }
 
+        SYSTEM_DelayMs(p[1]);
+
+        if (p[2]) {
+            BK4819_EnterTxMute();
+            SYSTEM_DelayMs(p[2]);
+        }
+
+        p += 3;
+    }
+
+    /* Same teardown as PlayRogerNormal — leave TX path ready for DTMF/CSS tail + next PTT */
+    BK4819_EnterTxMute();
     BK4819_SetAF(BK4819_AF_MUTE);
-
-    for (unsigned int i = 0; i < ARRAY_SIZE(RogerMDC_Configuration); i++) {
-        BK4819_WriteRegister(RogerMDC_Configuration[i].reg, RogerMDC_Configuration[i].value);
-    }
-
-    // Send the data from the roger table
-    for (unsigned int i = 0; i < ARRAY_SIZE(FSK_RogerTable); i++) {
-        BK4819_WriteRegister(BK4819_REG_5F, FSK_RogerTable[i]);
-    }
-
-    SYSTEM_DelayMs(20);
-
-    // 4 sync bytes, 6 byte preamble, Enable FSK TX
-    BK4819_WriteRegister(BK4819_REG_59, 0x0868);
-
-    SYSTEM_DelayMs(180);
-
-    // Stop FSK TX, reset Tone-2, disable FSK
-    BK4819_WriteRegister(BK4819_REG_59, 0x0068);
     BK4819_WriteRegister(BK4819_REG_70, 0x0000);
-    BK4819_WriteRegister(BK4819_REG_58, 0x0000);
+    BK4819_WriteRegister(BK4819_REG_30, 0xC3FE);
 }
 
 void BK4819_PlayRoger(void)
@@ -1831,19 +1821,31 @@ void BK4819_PlayRoger(void)
         if (gMDC1200_ID != 0) {
             uint8_t packet[42];
             unsigned int size;
-            size = MDC1200_encode_single_packet(packet, MDC1200_OP_CODE_PTT_ID, 0x80, gMDC1200_ID);
-            BK4819_PlayMDC1200(packet, size, false);
+            /* 尾ID=POST_ID arg=0x00 (V9/losehu对齐): 0x80是首码PTT ID语义,
+               松键时发首码摩托罗拉只闪现即清除; 尾码才触发呼号持久显示 */
+            size = MDC1200_encode_single_packet(packet, MDC1200_OP_CODE_PTT_ID, 0x00, gMDC1200_ID);
+            BK4819_PlayMDC1200(packet, size);
         }
+    } else if (gEeprom.ROGER == ROGER_MODE_YAN_ID) {
+        (void)YAN_RF_Send();
+    } else if (gEeprom.ROGER >= ROGER_MODE_CUSTOM1) {
+        const uint8_t i = gEeprom.ROGER - ROGER_MODE_CUSTOM1;
+        BK4819_PlayRogerSequence(&gRogerSeq_Custom[gRogerSeqOff[i]], gRogerSeqLen[i]);
     }
 }
 
-void BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size, const bool long_preamble)
+void BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size)
 {
     uint16_t fsk_reg59;
     unsigned int i;
     const uint16_t *p = (const uint16_t *)data;
 
     AUDIO_AudioPathOff();
+
+    /* FSK块断电复位30ms (V9/losehu定案): 上次TX或Yan RX驻留的FSK解调器/
+       字节计数器残留会污染本次发送(FIFO欠载垫同步字, 交替/首帧必败) */
+    BK4819_WriteRegister(BK4819_REG_58, 0x0000);
+    SYSTEM_DelayMs(30);
 
     BK4819_WriteRegister(BK4819_REG_50, 0x3B20);
 
@@ -1897,18 +1899,10 @@ void BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size, const bool
         (1u <<  7) |
         (96u <<  0));
 
-    fsk_reg59 = (0u << 15) |
-                (0u << 14) |
-                (0u << 13) |
-                (0u << 12) |
-                (0u << 11) |
-                (0u << 10) |
-                (0u <<  9) |
-                (0u <<  8) |
-                (0u <<  4) |
-                (1u <<  3) |
-                (0u <<  0);
-    fsk_reg59 |= long_preamble ? 15u << 4 : 3u << 4;
+    /* V9定案(2026-09-21): 前导字段固定15=AA×16, 首尾音一致
+       (短前导3=AA×3仅20ms, 摩托罗拉位同步/AGC窗口不足);
+       bit3=1 四字节硬件同步槽00×4 */
+    fsk_reg59 = (15u << 4) | (1u << 3);
 
     BK4819_WriteRegister(BK4819_REG_5D, ((size - 1) << 8));
     BK4819_WriteRegister(BK4819_REG_5A, 0x0000);
@@ -1957,115 +1951,13 @@ void BK4819_PlayMDC1200(const uint8_t *data, const unsigned int size, const bool
         BK4819_REG_30_ENABLE_TX_DSP    |
     0);
     BK4819_WriteRegister(BK4819_REG_50, 0x3B20);
-}
-
-void BK4819_DisableMDC1200Rx(void)
-{
-    BK4819_WriteRegister(BK4819_REG_70, 0);
-    BK4819_WriteRegister(BK4819_REG_72, 0);
-    BK4819_WriteRegister(BK4819_REG_58, 0);
-    BK4819_WriteRegister(BK4819_REG_59, 0x0068);
-    BK4819_WriteRegister(BK4819_REG_5A, 0);
-    BK4819_WriteRegister(BK4819_REG_5B, 0);
-    BK4819_WriteRegister(BK4819_REG_5C, 0);
-    BK4819_WriteRegister(BK4819_REG_5D, 0);
-    BK4819_WriteRegister(BK4819_REG_5E, 0);
-}
-
-void BK4819_EnableMDC1200Rx(void)
-{
-    uint16_t fsk_reg59;
-
-    BK4819_WriteRegister(BK4819_REG_70,
-        (0u << 15) |
-        (0u <<  8) |
-        (1u <<  7) |
-        (96u <<  0));
-
-    BK4819_WriteRegister(BK4819_REG_72, scale_freq(1200));
-
-    BK4819_WriteRegister(BK4819_REG_58,
-        (1u << 13) |
-        (7u << 10) |
-        (3u <<  8) |
-        (0u <<  6) |
-        (0u <<  4) |
-        (1u <<  1) |
-        (1u <<  0));
-
-    BK4819_WriteRegister(BK4819_REG_5A, 0xFB72);
-    BK4819_WriteRegister(BK4819_REG_5B, 0x4099);
-
-    BK4819_WriteRegister(BK4819_REG_5C, 0xA730);
-
-    BK4819_WriteRegister(BK4819_REG_5E, (64u << 3) | (1u << 0));
-
-    {
-        uint16_t size = (MDC1200_FEC_K * 2);
-        BK4819_WriteRegister(BK4819_REG_5D, ((size - 1) << 8));
-    }
-
-    fsk_reg59 = (0u << 15) |
-                (0u << 14) |
-                (0u << 13) |
-                (0u << 12) |
-                (0u << 11) |
-                (0u << 10) |
-                (0u <<  9) |
-                (0u <<  8) |
-                (0u <<  4) |
-                (1u <<  3) |
-                (0u <<  0);
-
-    BK4819_WriteRegister(BK4819_REG_02, 0);
-    BK4819_WriteRegister(BK4819_REG_3F, BK4819_REG_3F_FSK_RX_FINISHED | BK4819_REG_3F_FSK_FIFO_ALMOST_FULL);
-
-    BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | fsk_reg59);
-    BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | fsk_reg59);
-}
-
-bool BK4819_ReadMDC1200RxBuffer(uint8_t *data, unsigned int *size)
-{
-    uint16_t fifo_count;
-    uint16_t status;
-    unsigned int i;
-    uint16_t fsk_reg59;
-
-    status = BK4819_ReadRegister(BK4819_REG_0C);
-    if (!(status & 1u))
-        return false;
-
-    fifo_count = BK4819_ReadRegister(BK4819_REG_5E) & 0x00FF;
-    if (fifo_count == 0 || fifo_count > 40) {
-        fsk_reg59 = BK4819_ReadRegister(BK4819_REG_59) & ~((1u << 15) | (1u << 14) | (1u << 12) | (1u << 11));
-        BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | fsk_reg59);
-        BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | fsk_reg59);
-        return false;
-    }
-
-    *size = fifo_count * 2;
-    for (i = 0; i < fifo_count; i++) {
-        uint16_t word = BK4819_ReadRegister(BK4819_REG_5F);
-        data[i * 2] = (word >> 8) & 0xFF;
-        data[i * 2 + 1] = word & 0xFF;
-    }
-
-    fsk_reg59 = BK4819_ReadRegister(BK4819_REG_59) & ~((1u << 15) | (1u << 14) | (1u << 12) | (1u << 11));
-    BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | fsk_reg59);
-    BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | fsk_reg59);
-
-    return true;
+    MDC1200_AppNoteOwnTx();
 }
 
 void BK4819_Enable_AfDac_DiscMode_TxDsp(void)
 {
     BK4819_WriteRegister(BK4819_REG_30, 0x0000);
     BK4819_WriteRegister(BK4819_REG_30, 0x0302);
-}
-
-void BK4819_GetVoxAmp(uint16_t *pResult)
-{
-    *pResult = BK4819_ReadRegister(BK4819_REG_64) & 0x7FFF;
 }
 
 void BK4819_SetScrambleFrequencyControlWord(uint32_t Frequency)

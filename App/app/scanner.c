@@ -41,31 +41,14 @@ bool              gScanUseCssResult;
 STEP_Setting_t    stepSetting;
 uint8_t           scanHitCount;
 
-// VHF二次谐波验证相关
-typedef enum
-{
-    SCAN_FREQ_VERIFY_OFF,
-    SCAN_FREQ_VERIFY_FUNDAMENTAL,
-    SCAN_FREQ_VERIFY_HARMONIC
-} SCAN_FrequencyVerifyState_t;
+/* 进扫前 ScreenChannel；Stop 写回后再全量重载，避免频率 VFO 被冲成副信道 */
+static uint16_t s_scr0, s_scr1;
 
-static SCAN_FrequencyVerifyState_t scanFreqVerifyState;
-static uint32_t                    scanVerifyFundamental;
-static uint32_t                    scanVerifyHarmonic;
-static uint16_t                    scanVerifyFundamentalRssi;
+/* F+4 一键测频：先 VHF 前端，超时无信号再切 UHF，避免 150→450 三次谐波误锁 */
+static bool     scanBandIsUhf;
+static uint16_t scanNoResultCount;
+#define SCAN_BAND_SWITCH_10MS  500u  /* 5s */
 
-// 判断是否需要验证VHF二次谐波
-static bool SCANNER_ShouldVerifyVhfSecondHarmonic(const uint32_t frequency)
-{
-    const uint32_t fundamental = frequency / 2;
-
-    return frequency >= (frequencyBandTable[BAND3_137MHz].lower * 2) &&
-           frequency <  (frequencyBandTable[BAND4_174MHz].lower * 2) &&
-           fundamental >= frequencyBandTable[BAND3_137MHz].lower &&
-           fundamental <  frequencyBandTable[BAND4_174MHz].lower;
-}
-
-// 在指定频率开始亚音扫描
 static void SCANNER_StartCssScanAtFrequency(const uint32_t frequency)
 {
     gScanFrequency         = frequency;
@@ -83,64 +66,6 @@ static void SCANNER_StartCssScanAtFrequency(const uint32_t frequency)
         GUI_SelectNextDisplay(DISPLAY_SCANNER);
 
     gUpdateStatus = true;
-}
-
-// 为频率验证调谐到指定频率
-static void SCANNER_TuneForFrequencyVerification(const uint32_t frequency)
-{
-    BK4819_SetFrequency(frequency);
-    BK4819_PickRXFilterPathBasedOnFrequency(frequency);
-    BK4819_RX_TurnOn();
-}
-
-// 读取验证用的RSSI
-static uint16_t SCANNER_ReadVerificationRssi(void)
-{
-    (void)BK4819_GetRSSI();
-    return BK4819_GetRSSI();
-}
-
-// 开始频率验证
-static void SCANNER_StartFrequencyVerification(const uint32_t harmonic)
-{
-    scanVerifyFundamental = harmonic / 2;
-    scanVerifyHarmonic    = harmonic;
-    scanFreqVerifyState   = SCAN_FREQ_VERIFY_FUNDAMENTAL;
-
-    SCANNER_TuneForFrequencyVerification(scanVerifyFundamental);
-    gScanDelay_10ms = 2;
-}
-
-// 处理频率验证状态机
-static bool SCANNER_HandleFrequencyVerification(void)
-{
-    switch (scanFreqVerifyState) {
-        case SCAN_FREQ_VERIFY_FUNDAMENTAL:
-            scanVerifyFundamentalRssi = SCANNER_ReadVerificationRssi();
-            scanFreqVerifyState       = SCAN_FREQ_VERIFY_HARMONIC;
-            SCANNER_TuneForFrequencyVerification(scanVerifyHarmonic);
-            gScanDelay_10ms = 2;
-            return true;
-
-        case SCAN_FREQ_VERIFY_HARMONIC: {
-            const uint16_t harmonicRssi = SCANNER_ReadVerificationRssi();
-            const uint16_t margin       = 4;
-            uint32_t verifiedFrequency  = scanVerifyHarmonic;
-
-            if (scanVerifyFundamentalRssi > harmonicRssi &&
-                scanVerifyFundamentalRssi - harmonicRssi >= margin)
-            {
-                verifiedFrequency = scanVerifyFundamental;
-            }
-
-            scanFreqVerifyState = SCAN_FREQ_VERIFY_OFF;
-            SCANNER_StartCssScanAtFrequency(verifiedFrequency);
-            return true;
-        }
-
-        default:
-            return false;
-    }
 }
 
 static void SCANNER_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
@@ -301,9 +226,11 @@ static void SCANNER_Key_MENU(bool bKeyPressed, bool bKeyHeld)
                 gTxVfo->STEP_SETTING = stepSetting;
             }
             else {
-                RADIO_ConfigureChannel(0, VFO_CONFIGURE_RELOAD);
-                RADIO_ConfigureChannel(1, VFO_CONFIGURE_RELOAD);
-
+                /*
+                 * 单频扫亚音保存：当前 VFO 频率已在 Start 时 InitInfo 保留，
+                 * 直接写入扫到的亚音。不要 RADIO_ConfigureChannel 双端 Flash
+                 * 全量重载——双信道（主频/副信道）下会把频率 VFO 冲成副信道。
+                 */
                 gTxVfo->freq_config_RX.CodeType = gScanCssResultType;
                 gTxVfo->freq_config_RX.Code     = gScanCssResultCode;
                 gTxVfo->freq_config_TX.CodeType = gScanCssResultType;
@@ -322,7 +249,7 @@ static void SCANNER_Key_MENU(bool bKeyPressed, bool bKeyHeld)
 
             gTxVfo->CHANNEL_SAVE = chan;
             gEeprom.ScreenChannel[gEeprom.TX_VFO] = chan;
-#ifdef ENABLE_VOICE 
+#ifdef ENABLE_VOICE
             gAnotherVoiceID = VOICE_ID_CONFIRM;
 #endif
             gRequestDisplayScreen = DISPLAY_SCANNER;
@@ -413,6 +340,9 @@ void SCANNER_Start(bool singleFreq)
     BK4819_StopScan();
     RADIO_SelectVfos();
 
+    s_scr0 = gEeprom.ScreenChannel[0];
+    s_scr1 = gEeprom.ScreenChannel[1];
+
 #ifdef ENABLE_NOAA
     if (IS_NOAA_CHANNEL(gRxVfo->CHANNEL_SAVE))
         gRxVfo->CHANNEL_SAVE = FREQ_CHANNEL_FIRST + BAND6_400MHz;
@@ -452,12 +382,13 @@ void SCANNER_Start(bool singleFreq)
         gUpdateStatus = true;
     }
     else {
-        gScanCssState  = SCAN_CSS_STATE_OFF;
-        gScanFrequency = 0xFFFFFFFF;
+        gScanCssState      = SCAN_CSS_STATE_OFF;
+        gScanFrequency     = 0xFFFFFFFF;
+        scanBandIsUhf      = false;
+        scanNoResultCount  = 0;
 
-        // 不调用PickRXFilterPathBasedOnFrequency(0xFFFFFFFF)
-        // 因为那会关闭所有LNA，导致UHF灵敏度下降
-        // 保持当前RF路径设置，让扫描期间LNA保持开启
+        /* 0xFFFFFFFF → 选 VHF 前端起扫；超时无信号再切 UHF */
+        BK4819_PickRXFilterPathBasedOnFrequency(gScanFrequency);
         BK4819_EnableFrequencyScan();
 
         gUpdateStatus = true;
@@ -482,7 +413,6 @@ void SCANNER_Start(bool singleFreq)
     g_SquelchLost          = false;
     gScannerSaveState      = SCAN_SAVE_NO_PROMPT;
     gScanProgressIndicator = 0;
-    scanFreqVerifyState    = SCAN_FREQ_VERIFY_OFF;  // 初始化频率验证状态
 }
 
 void SCANNER_Stop(void)
@@ -491,10 +421,14 @@ void SCANNER_Stop(void)
         gEeprom.CROSS_BAND_RX_TX = gBackup_CROSS_BAND_RX_TX;
         gVfoConfigureMode        = VFO_CONFIGURE_RELOAD;
         gFlagResetVfos           = true;
+        /* 用户已保存时 gRequestSaveChannel>0，保留保存后的 ScreenChannel */
+        if (!gRequestSaveChannel) {
+            gEeprom.ScreenChannel[0] = s_scr0;
+            gEeprom.ScreenChannel[1] = s_scr1;
+        }
         gUpdateStatus            = true;
         gCssBackgroundScan       = false;
         gScanUseCssResult        = false;
-        scanFreqVerifyState      = SCAN_FREQ_VERIFY_OFF;  // 清理频率验证状态
 #ifdef ENABLE_VOICE
         gAnotherVoiceID          = VOICE_ID_CANCEL;
 #endif
@@ -516,17 +450,26 @@ void SCANNER_TimeSlice10ms(void)
         return;
     }
 
-    // 处理频率验证状态机
-    if (SCANNER_HandleFrequencyVerification()) {
-        return;
-    }
-
     switch (gScanCssState) {
         case SCAN_CSS_STATE_OFF: {
             // must be RF frequency scanning if we're here ?
             uint32_t result;
-            if (!BK4819_GetFrequencyScanResult(&result))
+            if (!BK4819_GetFrequencyScanResult(&result)) {
+                /* 芯片仍在扫：当前端无信号。VHF 轮超时后切 UHF 再扫一轮 */
+                if (!scanBandIsUhf && ++scanNoResultCount >= SCAN_BAND_SWITCH_10MS) {
+                    BK4819_DisableFrequencyScan();
+                    BK4819_ToggleGpioOut(BK4819_GPIO4_PIN32_VHF_LNA, false);
+                    BK4819_ToggleGpioOut(BK4819_GPIO3_PIN31_UHF_LNA, true);
+                    BK4819_EnableFrequencyScan();
+                    scanBandIsUhf     = true;
+                    scanNoResultCount = 0;
+                    scanHitCount      = 0;
+                    gScanFrequency    = 0xFFFFFFFF;
+                }
                 break;
+            }
+
+            scanNoResultCount = 0;
 
             int32_t delta = result - gScanFrequency;
             gScanFrequency = result;
@@ -543,18 +486,11 @@ void SCANNER_TimeSlice10ms(void)
             if (scanHitCount < 3) {
                 BK4819_EnableFrequencyScan();
             }
-            else if (SCANNER_ShouldVerifyVhfSecondHarmonic(gScanFrequency)) {
-                // 需要验证VHF二次谐波
-                SCANNER_StartFrequencyVerification(gScanFrequency);
-            }
             else {
-                // 直接开始亚音扫描
                 SCANNER_StartCssScanAtFrequency(gScanFrequency);
             }
 
-            if (scanFreqVerifyState == SCAN_FREQ_VERIFY_OFF) {
-                gScanDelay_10ms = scan_delay_10ms;
-            }
+            gScanDelay_10ms = scan_delay_10ms;
             //gScanDelay_10ms = 1;   // 10ms
             break;
         }

@@ -1722,6 +1722,812 @@ $('restoreCfgBtn').addEventListener('click', async () => {
   }
 });
 
+// ========== MODIFY CONFIG ==========
+/* 与 App/settings.c SETTINGS_InitEEPROM() 的布局一致：512B 配置区（SPI 0x00A000）。
+ * 读取 → 表单编辑 → 仅写有变化的 32B 区块（写后回读校验）→ 重启。 */
+let isModifyCfgBusy = false;
+let modifyCfgOriginal = null;   // 最近一次从设备读取的 512B 镜像
+const MC_AREA_CHUNK = 120;      // 与固件 SPI_FLASH_READ/WRITE 上限一致
+const MC_WRITE_CHUNK = 32;      // 差异写入粒度（与恢复配置页一致）
+
+const MC_ON_OFF = [
+  { v: 0, zh: '关', en: 'OFF' },
+  { v: 1, zh: '开', en: 'ON' }
+];
+
+function mcNumOptions(from, to, fmt) {
+  const out = [];
+  for (let v = from; v <= to; v++) {
+    const label = fmt ? fmt(v) : String(v);
+    out.push({ v: v, zh: label, en: label });
+  }
+  return out;
+}
+
+/* 侧键/M键可绑定动作：值 = ACTION_OPT_t 枚举（本固件全功能编译） */
+const MC_ACTIONS = [
+  { v: 0,  zh: '无', en: 'None' },
+  { v: 1,  zh: '手电', en: 'Flashlight' },
+  { v: 2,  zh: '电源', en: 'Power' },
+  { v: 3,  zh: '监听', en: 'Monitor' },
+  { v: 4,  zh: '扫描', en: 'Scan' },
+  { v: 5,  zh: '声控', en: 'VOX' },
+  { v: 6,  zh: '报警', en: 'Alarm' },
+  { v: 7,  zh: '收音机', en: 'FM Radio' },
+  { v: 8,  zh: '1750Hz', en: '1750Hz' },
+  { v: 9,  zh: '键盘锁', en: 'Lock Keypad' },
+  { v: 10, zh: 'VFO A/B', en: 'VFO A/B' },
+  { v: 11, zh: 'VFO/MR', en: 'VFO/MR' },
+  { v: 12, zh: '调制模式', en: 'Mode' },
+  { v: 13, zh: '背光暂关', en: 'BLMIN TMP OFF' },
+  { v: 14, zh: '接收模式', en: 'RX Mode' },
+  { v: 15, zh: '主界面', en: 'Main Only' },
+  { v: 16, zh: 'PTT', en: 'PTT' },
+  { v: 17, zh: '宽窄带', en: 'Wide/Narrow' },
+  { v: 18, zh: '背光开关', en: 'Backlight' },
+  { v: 19, zh: '静音', en: 'Mute' },
+  { v: 20, zh: 'RxA', en: 'RxA' },
+  { v: 21, zh: '大功率', en: 'Power High' },
+  { v: 22, zh: '移除频差', en: 'Remove Offset' },
+  { v: 23, zh: 'REGA报警', en: 'REGA Alarm' },
+  { v: 24, zh: 'REGA测试', en: 'REGA Test' }
+];
+
+/* 扫描恢复：0=STOP；1..80=载波恢复(250ms/步)；81..104=超时恢复(5s/步) */
+function mcScRevOptions() {
+  const out = [{ v: 0, zh: '停止', en: 'STOP', group: '' }];
+  for (let v = 1; v <= 80; v++) {
+    const s = (v * 250) / 1000;
+    const label = (s % 1 === 0 ? s.toFixed(0) : s.toFixed(2)) + 's';
+    out.push({ v: v, zh: '载波 ' + label, en: 'Carrier ' + label, group: 'carrier' });
+  }
+  for (let v = 81; v <= 104; v++) {
+    const label = ((v - 80) * 5) + 's';
+    out.push({ v: v, zh: '超时 ' + label, en: 'Timeout ' + label, group: 'timeout' });
+  }
+  return out;
+}
+
+/* 背光时间：0=关；1..60 显示 MMm:SSs（5s 步进，与固件 %02dm:%02ds 一致）；61=开 */
+function mcAbrOptions() {
+  const out = [{ v: 0, zh: '关', en: 'OFF' }];
+  for (let v = 1; v <= 60; v++) {
+    const s = v * 5;
+    const label = String(Math.floor(s / 60)).padStart(2, '0') + 'm:' + String(s % 60).padStart(2, '0') + 's';
+    out.push({ v: v, zh: label, en: label });
+  }
+  out.push({ v: 61, zh: '开', en: 'ON' });
+  return out;
+}
+
+const MC_FIELDS = {
+  sql: {
+    zh: '静噪等级', en: 'Squelch Level', type: 'select',
+    options: mcNumOptions(0, 9),
+    get: function(b) { return b[0x01] < 10 ? b[0x01] : 1; },
+    set: function(b, v) { b[0x01] = v; }
+  },
+  tot: {
+    zh: '发射限时', en: 'TX Timeout (TOT)', type: 'number',
+    min: 30, max: 900, step: 5,
+    hint: { zh: '秒，30–900 且为 5 的倍数', en: 'seconds, 30-900 in steps of 5' },
+    get: function(b) { const v = b[0x02]; return (v > 4 && v < 180) ? (v + 1) * 5 : 60; },
+    set: function(b, v) { b[0x02] = Math.round(v / 5) - 1; }
+  },
+  mic: {
+    zh: '麦克风增益', en: 'Mic Gain', type: 'select',
+    options: mcNumOptions(0, 8),
+    get: function(b) { return b[0x07] < 9 ? b[0x07] : 4; },
+    set: function(b, v) { b[0x07] = v; }
+  },
+  abrmax: {
+    zh: '背光最亮', en: 'Backlight Max', type: 'select',
+    options: mcNumOptions(0, 10),
+    get: function(b) { const v = b[0x08] & 0x0F; return v <= 10 ? v : 10; },
+    set: function(b, v) { b[0x08] = (b[0x08] & 0xF0) | (v & 0x0F); }
+  },
+  abrmin: {
+    zh: '背光最暗', en: 'Backlight Min', type: 'select',
+    options: mcNumOptions(0, 10),
+    get: function(b) { const max = (b[0x08] & 0x0F) <= 10 ? (b[0x08] & 0x0F) : 10; const v = b[0x08] >> 4; return v < max ? v : 0; },
+    set: function(b, v) { b[0x08] = (b[0x08] & 0x0F) | ((v & 0x0F) << 4); }
+  },
+  abr: {
+    zh: '背光时间', en: 'Backlight Time', type: 'select',
+    options: mcAbrOptions(),
+    get: function(b) { return b[0x0D] < 62 ? b[0x0D] : 12; },
+    set: function(b, v) { b[0x0D] = v; }
+  },
+  ponmsg: {
+    zh: '开机画面', en: 'Power-on Display', type: 'select',
+    options: [
+      { v: 0, zh: '关闭', en: 'OFF' },
+      { v: 1, zh: '默认', en: 'Default' },
+      { v: 2, zh: '自定义', en: 'Custom' }
+    ],
+    get: function(b) { return b[0xAF] < 3 ? b[0xAF] : 1; },
+    set: function(b, v) { b[0xAF] = v; }
+  },
+  lang: {
+    zh: '显示语言', en: 'UI Language', type: 'select',
+    options: [
+      { v: 0, zh: 'English', en: 'English' },
+      { v: 1, zh: '中文', en: '中文' }
+    ],
+    get: function(b) { return b[0x170] < 2 ? b[0x170] : 0; },
+    set: function(b, v) { b[0x170] = v; }
+  },
+  beep: {
+    zh: '按键音', en: 'Key Beep', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return b[0xA8] & 1; },
+    set: function(b, v) { b[0xA8] = (b[0xA8] & 0xFE) | (v ? 1 : 0); }
+  },
+  roger: {
+    zh: '发射尾音', en: 'Roger', type: 'select',
+    options: [
+      { v: 0, zh: '关', en: 'OFF' },
+      { v: 1, zh: 'ROGER', en: 'ROGER' },
+      { v: 2, zh: 'MDC', en: 'MDC' },
+      { v: 3, zh: 'Yan ID', en: 'Yan ID' },
+      { v: 4, zh: 'Custom1', en: 'Custom1' },
+      { v: 5, zh: 'Custom2', en: 'Custom2' },
+      { v: 6, zh: 'Custom3', en: 'Custom3' }
+    ],
+    get: function(b) { return b[0xC1] <= 6 ? b[0xC1] : 0; },
+    set: function(b, v) { b[0xC1] = v; }
+  },
+  mdcid: {
+    zh: 'MDC ID', en: 'MDC ID', type: 'text', maxLength: 4,
+    hint: { zh: '1–4 位十六进制（0000–FFFF）', en: '1-4 hex digits (0000-FFFF)' },
+    get: function(b) {
+      let v = (b[0x172] << 8) | b[0x173];
+      if (v === 0xFFFF) v = 0;
+      return ('000' + v.toString(16)).slice(-4).toUpperCase();
+    },
+    set: function(b, v) {
+      const n = parseInt(v, 16) & 0xFFFF;
+      b[0x172] = (n >> 8) & 0xFF;
+      b[0x173] = n & 0xFF;
+    }
+  },
+  ste: {
+    zh: '尾音消除', en: 'Tail Tone Elim.', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return b[0x0E] & 1; },
+    set: function(b, v) { b[0x0E] = (b[0x0E] & 0xFE) | (v ? 1 : 0); }
+  },
+  rpste: {
+    zh: '过中继尾音', en: 'Repeater STE', type: 'select',
+    options: [{ v: 0, zh: '关', en: 'OFF' }].concat(mcNumOptions(1, 10, function(v) { return (v * 5) + 'ms'; })),
+    get: function(b) { return b[0xC2] < 11 ? b[0xC2] : 0; },
+    set: function(b, v) { b[0xC2] = v; }
+  },
+  bootsnd: {
+    zh: '开机音效', en: 'Boot Sound', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return b[0x174] & 1; },
+    set: function(b, v) { b[0x174] = (b[0x174] & 0xFE) | (v ? 1 : 0); }
+  },
+  breath: {
+    zh: '飞机灯', en: 'Breath LED', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return (b[0x174] >> 1) & 1; },
+    set: function(b, v) { b[0x174] = (b[0x174] & 0xFD) | (v ? 2 : 0); }
+  },
+  bltxrx: {
+    zh: '收发背光', en: 'Backlight TX/RX', type: 'select',
+    options: [
+      { v: 0, zh: '关', en: 'OFF' },
+      { v: 1, zh: '发射', en: 'TX' },
+      { v: 2, zh: '接收', en: 'RX' },
+      { v: 3, zh: '接收/发射', en: 'TX/RX' }
+    ],
+    get: function(b) { return (b[0x157] >> 6) & 3; },
+    set: function(b, v) { b[0x157] = (b[0x157] & 0x3F) | ((v & 3) << 6); }
+  },
+  setctr: {
+    zh: '设置对比度', en: 'Contrast', type: 'select',
+    options: mcNumOptions(1, 15),
+    get: function(b) { const v = b[0x15D] & 0x0F; return v > 0 ? v : 10; },
+    set: function(b, v) { b[0x15D] = (b[0x15D] & 0xF0) | (v & 0x0F); }
+  },
+  battxt: {
+    zh: '电池显示', en: 'Battery Display', type: 'select',
+    options: [
+      { v: 0, zh: '无', en: 'NONE' },
+      { v: 1, zh: '电压', en: 'VOLTAGE' },
+      { v: 2, zh: '百分比', en: 'PERCENT' }
+    ],
+    get: function(b) { const v = (b[0x157] >> 2) & 3; return v <= 2 ? v : 2; },
+    set: function(b, v) { b[0x157] = (b[0x157] & 0xF3) | ((v & 3) << 2); }
+  },
+  micbar: {
+    zh: '发射提示', en: 'TX Indicator', type: 'select',
+    options: [
+      { v: 0, zh: '关闭', en: 'OFF' },
+      { v: 1, zh: '弹窗', en: 'Popup' }
+    ],
+    get: function(b) { return ((b[0x157] >> 4) & 3) === 0 ? 0 : 1; },
+    set: function(b, v) { b[0x157] = (b[0x157] & 0xCF) | (v ? 0x10 : 0); }
+  },
+  spdisp: {
+    zh: '频谱显示', en: 'Spectrum Mode', type: 'select',
+    options: [
+      { v: 0, zh: '简单', en: 'Simple' },
+      { v: 1, zh: '专业', en: 'Expert' }
+    ],
+    get: function(b) { return b[0x14B] & 1; },
+    set: function(b, v) { b[0x14B] = (b[0x14B] & 0xFE) | (v ? 1 : 0); }
+  },
+  boothint: {
+    zh: '开机提示', en: 'Boot Hint', type: 'select',
+    visibleWhen: function(values) { return values.ponmsg === 1; },
+    options: [
+      { v: 0, zh: '叮咚鸡', en: 'Dondji' },
+      { v: 1, zh: '靓力北京', en: 'Beautiful BJ' },
+      { v: 2, zh: '五五节纪念版', en: 'happy 55th' }
+    ],
+    get: function(b) { return b[0x171] < 3 ? b[0x171] : 2; },
+    set: function(b, v) { b[0x171] = v; }
+  },
+  save: {
+    zh: '省电模式', en: 'Battery Save', type: 'select',
+    options: [{ v: 0, zh: '关', en: 'OFF' }].concat(mcNumOptions(1, 5)),
+    get: function(b) { return b[0x0B] < 6 ? b[0x0B] : 4; },
+    set: function(b, v) { b[0x0B] = v; }
+  },
+  rxmode: {
+    zh: '接收模式', en: 'RX Mode', type: 'select',
+    options: [
+      { v: 0, zh: '仅主信道', en: 'MAIN ONLY' },
+      { v: 1, zh: '双频守候', en: 'DUAL RX' },
+      { v: 2, zh: '跨段', en: 'CROSS BAND' },
+      { v: 3, zh: '主发双收', en: 'MAIN+TX' }
+    ],
+    get: function(b) { return (b[0x0C] !== 0 ? 1 : 0) + (b[0x0A] !== 0 ? 2 : 0); },
+    set: function(b, v) {
+      b[0x0C] = (v & 1) ? (b[0x0C] || 1) : 0;
+      b[0x0A] = (v & 2) ? (b[0x0A] || 1) : 0;
+    }
+  },
+  screv: {
+    zh: '扫描恢复', en: 'Scan Resume', type: 'select',
+    options: mcScRevOptions(),
+    get: function(b) { return b[0xAD] < 105 ? b[0xAD] : 14; },
+    set: function(b, v) { b[0xAD] = v; }
+  },
+  keyml: {
+    zh: 'MENU长按', en: 'MENU Long Press', type: 'select', options: MC_ACTIONS,
+    get: function(b) { return b[0xA8] >> 1; },
+    set: function(b, v) { b[0xA8] = (b[0xA8] & 0x01) | ((v & 0x7F) << 1); }
+  },
+  k1s: {
+    zh: '侧键1短按', en: 'Side Key 1 Short', type: 'select', options: MC_ACTIONS,
+    get: function(b) { return b[0xA9] < MC_ACTIONS.length ? b[0xA9] : 3; },
+    set: function(b, v) { b[0xA9] = v; }
+  },
+  k1l: {
+    zh: '侧键1长按', en: 'Side Key 1 Long', type: 'select', options: MC_ACTIONS,
+    get: function(b) { return b[0xAA] < MC_ACTIONS.length ? b[0xAA] : 0; },
+    set: function(b, v) { b[0xAA] = v; }
+  },
+  k2s: {
+    zh: '侧键2短按', en: 'Side Key 2 Short', type: 'select', options: MC_ACTIONS,
+    get: function(b) { return b[0xAB] < MC_ACTIONS.length ? b[0xAB] : 4; },
+    set: function(b, v) { b[0xAB] = v; }
+  },
+  k2l: {
+    zh: '侧键2长按', en: 'Side Key 2 Long', type: 'select', options: MC_ACTIONS,
+    get: function(b) { return b[0xAC] < MC_ACTIONS.length ? b[0xAC] : 0; },
+    set: function(b, v) { b[0xAC] = v; }
+  },
+  autolk: {
+    zh: '自动锁键', en: 'Auto Keypad Lock', type: 'select',
+    options: [{ v: 0, zh: '关', en: 'OFF' }].concat(mcNumOptions(1, 40, function(v) { return v + 'min'; })),
+    get: function(b) { return b[0xAE] < 41 ? b[0xAE] : 0; },
+    set: function(b, v) { b[0xAE] = v; }
+  },
+  yanid: {
+    zh: 'Yan ID', en: 'Yan ID', type: 'text',
+    hint: { zh: '留空禁用；1–6 位 A–Z / 0–9', en: 'empty to disable; 1-6 chars A-Z / 0-9' },
+    get: function(b) {
+      let s = '';
+      for (let i = 0; i < 6; i++) {
+        const c = b[0x88 + i];
+        if (c <= 0x20 || c >= 0x7F) break;
+        s += String.fromCharCode(c);
+      }
+      return s;
+    },
+    set: function(b, v) {
+      for (let i = 0; i < 6; i++) {
+        b[0x88 + i] = i < v.length ? v.charCodeAt(i) : 0x00;
+      }
+    }
+  },
+  yanidrx: {
+    zh: '接收 Yan ID', en: 'RX Yan ID', type: 'select', options: MC_ON_OFF,
+    visibleWhen: function(values) { return values.roger === 3; },
+    get: function(b) { return b[0x8F] === 1 ? 1 : 0; },
+    set: function(b, v) { b[0x8F] = v ? 1 : 0; }
+  },
+  mdcrx: {
+    zh: '接收MDC ID', en: 'RX MDC ID', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return b[0x8E] === 1 ? 1 : 0; },
+    set: function(b, v) { b[0x8E] = v ? 1 : 0; }
+  },
+  sclist: {
+    zh: '扫描列表', en: 'Scan List', type: 'select',
+    options: mcNumOptions(1, 24, function(v) { return String(v).padStart(2, '0'); }).concat([{ v: 25, zh: '全部', en: 'ALL' }]),
+    hint: { zh: '开机默认扫描列表；25=全部', en: 'default scan list; 25=ALL' },
+    get: function(b) { const v = b[0x130] & 0x7F; return (v >= 1 && v <= 25) ? v : 1; },
+    set: function(b, v) { b[0x130] = (b[0x130] & 0x80) | (v & 0x7F); }
+  },
+  scpri: {
+    zh: '优先扫描', en: 'Priority Scan', type: 'select', options: MC_ON_OFF,
+    get: function(b) { return (b[0x130] >> 7) & 1; },
+    set: function(b, v) { b[0x130] = (b[0x130] & 0x7F) | (v ? 0x80 : 0); }
+  },
+  sprich1: {
+    zh: '优先信道1', en: 'Priority CH 1', type: 'number', min: 0, max: 1024, step: 1,
+    hint: { zh: '0=无；1–1024 对应 CH1–CH1024', en: '0=None; 1-1024 = CH1-CH1024' },
+    get: function(b) { const v = b[0x131] | (b[0x132] << 8); return v >= 1024 ? 0 : v + 1; },
+    set: function(b, v) { const f = (v === 0) ? 1024 : (v - 1); b[0x131] = f & 0xFF; b[0x132] = (f >> 8) & 0xFF; }
+  },
+  sprich2: {
+    zh: '优先信道2', en: 'Priority CH 2', type: 'number', min: 0, max: 1024, step: 1,
+    hint: { zh: '0=无；1–1024 对应 CH1–CH1024', en: '0=None; 1-1024 = CH1-CH1024' },
+    get: function(b) { const v = b[0x133] | (b[0x134] << 8); return v >= 1024 ? 0 : v + 1; },
+    set: function(b, v) { const f = (v === 0) ? 1024 : (v - 1); b[0x133] = f & 0xFF; b[0x134] = (f >> 8) & 0xFF; }
+  },
+  setlck: {
+    zh: '锁键范围', en: 'Lock Scope', type: 'select',
+    options: [
+      { v: 0, zh: '仅键盘', en: 'KEYS' },
+      { v: 1, zh: '键盘+PTT', en: 'KEYS+PTT' }
+    ],
+    get: function(b) { return (b[0x15D] >> 5) & 1; },
+    set: function(b, v) { b[0x15D] = (b[0x15D] & 0xDF) | (v ? 0x20 : 0); }
+  },
+  onecall: {
+    zh: '按键即呼', en: 'One-Key Call', type: 'number', min: 0, max: 1024, step: 1,
+    hint: { zh: '0=无；1–1024 对应 CH1–CH1024', en: '0=None; 1-1024 = CH1-CH1024' },
+    get: function(b) { const v = b[0x135] | (b[0x136] << 8); return v >= 1024 ? 0 : v + 1; },
+    set: function(b, v) { const f = (v === 0) ? 1024 : (v - 1); b[0x135] = f & 0xFF; b[0x136] = (f >> 8) & 0xFF; }
+  },
+  setpwr: {
+    zh: '设置功率', en: 'Set Power', type: 'select',
+    options: [
+      { v: 0, zh: '< 20m', en: '< 20m' },
+      { v: 1, zh: '125m', en: '125m' },
+      { v: 2, zh: '250m', en: '250m' },
+      { v: 3, zh: '500m', en: '500m' },
+      { v: 4, zh: '1', en: '1' },
+      { v: 5, zh: '2', en: '2' },
+      { v: 6, zh: '5', en: '5' }
+    ],
+    get: function(b) { const v = (b[0x15F] >> 4) & 0x0F; return v < 7 ? v : 0; },
+    set: function(b, v) { b[0x15F] = (b[0x15F] & 0x0F) | ((v & 0x0F) << 4); }
+  },
+  setaudfm: {
+    zh: '音频FM预设', en: 'Audio FM Preset', type: 'select',
+    options: [
+      { v: 0, zh: 'FLAT', en: 'FLAT' },
+      { v: 1, zh: 'CLEAN', en: 'CLEAN' },
+      { v: 2, zh: 'MID', en: 'MID' },
+      { v: 3, zh: 'BOOST', en: 'BOOST' },
+      { v: 4, zh: 'MAX', en: 'MAX' }
+    ],
+    get: function(b) { const v = b[0x00] & 0x0F; return v < 5 ? v : 0; },
+    set: function(b, v) { b[0x00] = (b[0x00] & 0xF0) | (v & 0x0F); }
+  },
+  setoff: {
+    zh: '进入休眠', en: 'Sleep Timeout', type: 'select',
+    options: [{ v: 0, zh: '关', en: 'OFF' }].concat(mcNumOptions(1, 120, function(v) { return Math.floor(v / 60) + 'h:' + String(v % 60).padStart(2, '0') + 'm'; })),
+    get: function(b) { const v = b[0x15C] >> 1; return v > 120 ? 60 : v; },
+    set: function(b, v) { b[0x15C] = (b[0x15C] & 0x01) | ((v & 0x7F) << 1); }
+  },
+  setnfm: {
+    zh: '设置窄带', en: 'Set NFM', type: 'select',
+    options: [
+      { v: 0, zh: '窄带', en: 'NARROW' },
+      { v: 1, zh: '更窄', en: 'NARROWER' }
+    ],
+    get: function(b) { return (b[0x0E] >> 1) & 1; },
+    set: function(b, v) { b[0x0E] = (b[0x0E] & 0xFD) | (v ? 0x02 : 0); }
+  }
+};
+
+/* 分组与组内顺序对应固件图标主菜单（信道/设置/显示/其它/关于）：
+   「设置」「显示」「其它」三个图标分组；「信道」为信道级设置由写频页管理、「关于」为只读信息，均不在此展示。
+   不显示：固件隐藏/排除项（信道显示、声控、电池类型、导航键、设置定时、设置音量(存于配置区外)等），
+   以及按需求移除的语音、报警、音频AM预设、设置按键、设NWR。选项文案与固件 ui/menu_sub_values_cn.c 一致。 */
+const MC_FIELD_GROUPS = [
+  { zh: '设置', en: 'Settings', fields: ['sql', 'roger', 'mdcid', 'yanid', 'yanidrx', 'mdcrx', 'ste', 'rpste', 'beep', 'mic', 'k1s', 'k1l', 'k2s', 'k2l', 'keyml', 'bootsnd'] },
+  { zh: '显示', en: 'Display', fields: ['lang', 'rxmode', 'ponmsg', 'boothint', 'abr', 'abrmin', 'abrmax', 'bltxrx', 'setctr', 'battxt', 'micbar', 'spdisp', 'breath'] },
+  { zh: '其它', en: 'Other', fields: ['sclist', 'scpri', 'sprich1', 'sprich2', 'screv', 'autolk', 'setlck', 'tot', 'save', 'onecall', 'setpwr', 'setaudfm', 'setoff', 'setnfm'] }
+];
+
+function mcLang() {
+  return (window.getCurrentLang && window.getCurrentLang() === 'en') ? 'en' : 'zh';
+}
+
+function mcL(pairs) {
+  if (pairs === undefined || pairs === null) return '';
+  if (typeof pairs === 'string') return pairs;
+  return pairs[mcLang()] || pairs.zh || pairs.en || '';
+}
+
+function mcStatus(text, isError) {
+  const el = $('modifycfgStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isError ? '#f85149' : '';
+}
+
+/** 解码全部字段（值 = 固件加载后的等效值） */
+function mcDecodeAll(buf) {
+  const values = {};
+  Object.keys(MC_FIELDS).forEach(function(id) {
+    values[id] = MC_FIELDS[id].get(buf);
+  });
+  return values;
+}
+
+/** 生成表单 DOM；values 为各字段当前值 */
+function mcBuildForm(values) {
+  const root = $('modifycfgForm');
+  if (!root) return;
+  const lang = mcLang();
+  root.replaceChildren();
+  MC_FIELD_GROUPS.forEach(function(group) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'cfgedit-group';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cfgedit-group-title';
+    titleEl.textContent = group[lang] || group.zh;
+    groupEl.appendChild(titleEl);
+    const gridEl = document.createElement('div');
+    gridEl.className = 'cfgedit-grid';
+    group.fields.forEach(function(id) {
+      const def = MC_FIELDS[id];
+      const fieldEl = document.createElement('label');
+      fieldEl.className = 'cfgedit-field';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'cfgedit-label';
+      labelEl.textContent = def[lang] || def.zh;
+      fieldEl.appendChild(labelEl);
+      let control;
+      if (def.type === 'select') {
+        control = document.createElement('select');
+        control.className = 'cfgedit-control';
+        const groups = {};
+        const plain = [];
+        def.options.forEach(function(opt) {
+          const optEl = document.createElement('option');
+          optEl.value = String(opt.v);
+          optEl.textContent = opt[lang] || opt.zh;
+          if (opt.group) {
+            if (!groups[opt.group]) {
+              groups[opt.group] = document.createElement('optgroup');
+              groups[opt.group].label = opt.group === 'carrier'
+                ? (lang === 'en' ? 'Carrier resume' : '载波恢复')
+                : (lang === 'en' ? 'Timeout resume' : '超时恢复');
+            }
+            groups[opt.group].appendChild(optEl);
+          } else {
+            plain.push(optEl);
+          }
+        });
+        plain.forEach(function(o) { control.appendChild(o); });
+        Object.keys(groups).forEach(function(k) { control.appendChild(groups[k]); });
+        mcSetSelectValue(control, values[id]);
+      } else if (def.type === 'number') {
+        control = document.createElement('input');
+        control.type = 'number';
+        control.className = 'cfgedit-control';
+        control.min = String(def.min);
+        control.max = String(def.max);
+        control.step = String(def.step || 1);
+        control.value = String(values[id]);
+      } else {
+        control = document.createElement('input');
+        control.type = 'text';
+        control.className = 'cfgedit-control';
+        control.maxLength = def.maxLength || 6;
+        control.spellcheck = false;
+        control.value = String(values[id]);
+      }
+      control.dataset.mcField = id;
+      control.addEventListener('change', mcSyncDirtyState);
+      control.addEventListener('input', mcSyncDirtyState);
+      fieldEl.appendChild(control);
+      if (def.hint) {
+        const hintEl = document.createElement('span');
+        hintEl.className = 'cfgedit-hint';
+        hintEl.textContent = mcL(def.hint);
+        fieldEl.appendChild(hintEl);
+      }
+      gridEl.appendChild(fieldEl);
+    });
+    groupEl.appendChild(gridEl);
+    root.appendChild(groupEl);
+  });
+  mcSyncConditionalFields(values);
+}
+
+/* 固件菜单条件显隐（与 MENU_IsMenuIdExcludedFromBrowse 一致）：
+   发射尾音=Yan ID 时才显示「接收 Yan ID」；开机画面=默认时才显示「开机提示」 */
+function mcSyncConditionalFields(values) {
+  const root = $('modifycfgForm');
+  if (!root) return;
+  root.querySelectorAll('[data-mc-field]').forEach(function(control) {
+    const def = MC_FIELDS[control.dataset.mcField];
+    if (!def || !def.visibleWhen) return;
+    const fieldEl = control.closest('.cfgedit-field');
+    if (fieldEl) fieldEl.hidden = !def.visibleWhen(values);
+  });
+}
+
+/** select 赋值：无匹配选项时（如 Flash 残留超范围值）动态补一项「当前值」 */
+function mcSetSelectValue(sel, v) {
+  const s = String(v);
+  let has = false;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === s) { has = true; break; }
+  }
+  if (!has) {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = (mcLang() === 'en' ? 'Current: ' : '当前值 ') + s;
+    sel.insertBefore(opt, sel.firstChild);
+  }
+  sel.value = s;
+}
+
+/** 从 DOM 收集表单值 */
+function mcCollectForm() {
+  const values = {};
+  const root = $('modifycfgForm');
+  if (!root) return values;
+  root.querySelectorAll('[data-mc-field]').forEach(function(control) {
+    const id = control.dataset.mcField;
+    const def = MC_FIELDS[id];
+    if (!def) return;
+    if (def.type === 'select') {
+      values[id] = parseInt(control.value, 10);
+    } else if (def.type === 'number') {
+      values[id] = control.value.trim() === '' ? NaN : parseFloat(control.value);
+    } else {
+      values[id] = control.value.trim().toUpperCase();
+    }
+  });
+  return values;
+}
+
+/** 与读取时的原值比对，高亮变化项并更新状态行 */
+function mcSyncDirtyState() {
+  const values = mcCollectForm();
+  mcSyncConditionalFields(values);
+  if (!modifyCfgOriginal) return;
+  const origValues = mcDecodeAll(modifyCfgOriginal);
+  let dirtyCount = 0;
+  const root = $('modifycfgForm');
+  if (root) {
+    root.querySelectorAll('[data-mc-field]').forEach(function(control) {
+      const id = control.dataset.mcField;
+      const changed = String(values[id]) !== String(origValues[id]);
+      control.classList.toggle('cfgedit-dirty', changed);
+      if (changed) dirtyCount++;
+    });
+  }
+  if (dirtyCount > 0) {
+    mcStatus(mcLang() === 'en' ? (dirtyCount + ' setting(s) modified') : ('已修改 ' + dirtyCount + ' 项设置'), false);
+  } else {
+    mcStatus(mcLang() === 'en' ? 'No changes yet' : '暂无修改', false);
+  }
+}
+
+/** 写入前校验，返回错误信息数组 */
+function mcValidate(values) {
+  const errs = [];
+  const lang = mcLang();
+  const max = values.abrmax, min = values.abrmin;
+  if (max === 0) {
+    if (min !== 0) values.abrmin = 0;   // max=0 时固件强制 min=0，静默归一
+  } else if (min >= max) {
+    errs.push(lang === 'en'
+      ? 'Backlight min must be less than backlight max'
+      : '背光最暗必须小于背光最亮');
+  }
+  const tot = values.tot;
+  if (!Number.isFinite(tot) || tot < 30 || tot > 900 || Math.round(tot) !== tot || tot % 5 !== 0) {
+    errs.push(lang === 'en'
+      ? 'TX timeout must be 30-900 seconds in steps of 5'
+      : '发射限时须为 30–900 秒且为 5 的倍数');
+  }
+  const yanid = values.yanid;
+  if (!/^[A-Z0-9]{0,6}$/.test(yanid)) {
+    errs.push(lang === 'en'
+      ? 'Yan ID: 1-6 chars A-Z / 0-9 (empty to disable)'
+      : 'Yan ID 须为 1–6 位 A–Z / 0–9（留空禁用）');
+  }
+  const mdcid = values.mdcid;
+  if (!/^[0-9A-F]{1,4}$/.test(mdcid)) {
+    errs.push(lang === 'en'
+      ? 'MDC ID: 1-4 hex digits (0-9, A-F)'
+      : 'MDC ID 须为 1–4 位十六进制（0–9、A–F）');
+  }
+  const mcChanNames = {
+    sprich1: lang === 'en' ? 'Priority CH 1' : '优先信道1',
+    sprich2: lang === 'en' ? 'Priority CH 2' : '优先信道2',
+    onecall: lang === 'en' ? 'One-Key Call' : '按键即呼'
+  };
+  Object.keys(mcChanNames).forEach(function(id) {
+    const v = values[id];
+    if (!Number.isFinite(v) || Math.round(v) !== v || v < 0 || v > 1024) {
+      errs.push(lang === 'en'
+        ? mcChanNames[id] + ': enter 0-1024 (0 = none)'
+        : mcChanNames[id] + '：请输入 0–1024（0 = 无）');
+    }
+  });
+  return errs;
+}
+
+/** 把表单值应用到目标镜像 */
+function mcApplyAll(buf, values) {
+  Object.keys(MC_FIELDS).forEach(function(id) {
+    if (values[id] === undefined) return;
+    MC_FIELDS[id].set(buf, values[id]);
+  });
+}
+
+async function modifycfgReadFromDevice() {
+  if (isModifyCfgBusy) return;
+  isModifyCfgBusy = true;
+  const readBtn = $('modifycfgReadBtn');
+  const writeBtn = $('modifycfgWriteBtn');
+  if (readBtn) readBtn.disabled = true;
+  if (writeBtn) writeBtn.disabled = true;
+  $('progressContainer').style.display = 'block';
+  updateProgress(0);
+  try {
+    if (!port) await connect();
+    readBuffer = [];
+    await sleep(1000);
+    const session = await requestDeviceInfoForCalib(window.t ? window.t('mcPurpose') : '配置');
+    const sessionTs = session.timestamp;
+    log(window.t ? window.t('logModifyCfgReading') : '正在读取设备配置...', 'info');
+    const data = new Uint8Array(CONFIG_FLASH_SIZE);
+    for (let i = 0; i < CONFIG_FLASH_SIZE; i += MC_AREA_CHUNK) {
+      const len = Math.min(MC_AREA_CHUNK, CONFIG_FLASH_SIZE - i);
+      const chunk = await spiFlashReadChunk(sessionTs, CONFIG_FLASH_BASE + i, len);
+      if (!chunk || chunk.length !== len) {
+        throw new Error('读取失败 @ 0x' + (CONFIG_FLASH_BASE + i).toString(16));
+      }
+      data.set(chunk, i);
+      updateProgress((i / CONFIG_FLASH_SIZE) * 100);
+    }
+    updateProgress(100);
+    modifyCfgOriginal = data;
+    mcBuildForm(mcDecodeAll(data));
+    mcStatus(mcLang() === 'en' ? 'Config loaded below' : '配置已读取并填充到下方表单', false);
+    log(window.t ? window.t('logModifyCfgReadOk') : '配置读取完成，已填充到表单', 'success');
+    if (writeBtn) writeBtn.disabled = false;
+  } catch (e) {
+    log(window.t ? window.t('logModifyCfgReadFailed', {msg: e.message}) : '配置读取失败: ' + e.message, 'error');
+  } finally {
+    isModifyCfgBusy = false;
+    if (readBtn) readBtn.disabled = false;
+    if (port) await disconnect();
+    setTimeout(() => { $('progressContainer').style.display = 'none'; updateProgress(0); }, 800);
+  }
+}
+
+async function modifycfgWriteToDevice() {
+  if (isModifyCfgBusy) return;
+  if (!modifyCfgOriginal) {
+    mcStatus(mcLang() === 'en' ? 'Read config from device first' : '请先从设备读取配置', true);
+    return;
+  }
+  const values = mcCollectForm();
+  const errs = mcValidate(values);
+  if (errs.length > 0) {
+    mcStatus((mcLang() === 'en' ? 'Validation failed: ' : '校验未通过：') + errs.join('；'), true);
+    log(window.t ? window.t('logModifyCfgValidateFailed') : '配置校验未通过，未写入设备', 'error');
+    return;
+  }
+  if (values.roger === 3 && values.yanid === '') {
+    log(window.t ? window.t('logModifyCfgRogerYanWarn') : '提示：发射尾音选择 Yan ID 但 Yan ID 为空，发射时将无尾音', 'warning');
+  }
+  isModifyCfgBusy = true;
+  const readBtn = $('modifycfgReadBtn');
+  const writeBtn = $('modifycfgWriteBtn');
+  if (readBtn) readBtn.disabled = true;
+  if (writeBtn) writeBtn.disabled = true;
+  $('progressContainer').style.display = 'block';
+  updateProgress(0);
+  let writePhaseStarted = false;
+  try {
+    if (!port) await connect();
+    readBuffer = [];
+    await sleep(1000);
+    const session = await requestDeviceInfoForCalib(window.t ? window.t('mcPurpose') : '配置');
+    const sessionTs = session.timestamp;
+    // 重新读取当前镜像作为写入基线（防止表单读取后设备状态发生变化）
+    const current = new Uint8Array(CONFIG_FLASH_SIZE);
+    for (let i = 0; i < CONFIG_FLASH_SIZE; i += MC_AREA_CHUNK) {
+      const len = Math.min(MC_AREA_CHUNK, CONFIG_FLASH_SIZE - i);
+      const chunk = await spiFlashReadChunk(sessionTs, CONFIG_FLASH_BASE + i, len);
+      if (!chunk || chunk.length !== len) {
+        throw new Error('读取失败 @ 0x' + (CONFIG_FLASH_BASE + i).toString(16));
+      }
+      current.set(chunk, i);
+      updateProgress((i / CONFIG_FLASH_SIZE) * 30);
+    }
+    const target = new Uint8Array(current);
+    mcApplyAll(target, values);
+    // 差异区块写入 + 回读校验
+    writePhaseStarted = true;
+    let writtenChunks = 0;
+    for (let off = 0; off < CONFIG_FLASH_SIZE; off += MC_WRITE_CHUNK) {
+      const tgt = target.subarray(off, off + MC_WRITE_CHUNK);
+      if (wfBytesEqual(current.subarray(off, off + MC_WRITE_CHUNK), tgt)) continue;
+      const ok = await spiFlashWriteChunk(sessionTs, CONFIG_FLASH_BASE + off, tgt);
+      let verify = ok ? await spiFlashReadChunk(sessionTs, CONFIG_FLASH_BASE + off, MC_WRITE_CHUNK) : null;
+      if (!ok || !verify || !wfBytesEqual(verify, tgt)) {
+        const retryOk = await spiFlashWriteChunk(sessionTs, CONFIG_FLASH_BASE + off, tgt);
+        verify = await spiFlashReadChunk(sessionTs, CONFIG_FLASH_BASE + off, MC_WRITE_CHUNK);
+        if (!retryOk || !verify || !wfBytesEqual(verify, tgt)) {
+          throw new Error('回读校验失败 @ 0x' + (CONFIG_FLASH_BASE + off).toString(16) + '（其后区块未写入）');
+        }
+      }
+      writtenChunks++;
+      updateProgress(30 + 70 * ((off + MC_WRITE_CHUNK) / CONFIG_FLASH_SIZE));
+    }
+    updateProgress(100);
+    if (writtenChunks === 0) {
+      log(window.t ? window.t('logModifyCfgNoChange') : '配置无变化，未写入任何数据', 'info');
+    } else {
+      log(window.t
+        ? window.t('logModifyCfgWriteOk', {chunks: writtenChunks})
+        : '配置写入完成：共写入 ' + writtenChunks + ' 个差异区块，已全部回读校验一致，设备正在重启...',
+        'success');
+      modifyCfgOriginal = target.slice();
+      mcBuildForm(mcDecodeAll(modifyCfgOriginal));
+      mcStatus(mcLang() === 'en' ? 'Config written and verified' : '配置已写入并校验一致', false);
+      await sendMessage(createMessage(MSG_REBOOT, 0));
+      await sleep(500);
+      log(window.t ? window.t('logRebootSent') : '已发送重启指令（设备将自动复位）', 'success');
+    }
+  } catch (e) {
+    log(window.t ? window.t('logModifyCfgWriteFailed', {msg: e.message}) : '配置写入失败: ' + e.message, 'error');
+    if (writePhaseStarted) {
+      log(window.t ? window.t('logModifyCfgPartialHint') : '设备可能处于部分写入状态：错误位置之后的区块保留原数据，重新执行写入即可完整覆盖', 'warning');
+    }
+  } finally {
+    isModifyCfgBusy = false;
+    if (readBtn) readBtn.disabled = false;
+    if (writeBtn) writeBtn.disabled = !modifyCfgOriginal;
+    if (port) await disconnect();
+    setTimeout(() => { $('progressContainer').style.display = 'none'; updateProgress(0); }, 800);
+  }
+}
+
+(function initModifyCfgTab() {
+  const readBtn = $('modifycfgReadBtn');
+  const writeBtn = $('modifycfgWriteBtn');
+  if (!readBtn || !writeBtn) return;
+  readBtn.addEventListener('click', function() { modifycfgReadFromDevice(); });
+  writeBtn.addEventListener('click', function() { modifycfgWriteToDevice(); });
+  mcBuildForm(mcDecodeAll(new Uint8Array(CONFIG_FLASH_SIZE)));
+  window.addEventListener('langchange', function() {
+    if (!modifyCfgOriginal) {
+      mcBuildForm(mcDecodeAll(new Uint8Array(CONFIG_FLASH_SIZE)));
+      return;
+    }
+    mcBuildForm(mcCollectForm());
+    mcSyncDirtyState();
+  });
+})();
+
 // ========== CAPABILITY CHECK ==========
 if (!('serial' in navigator)) {
   log(window.t ? window.t('logWebSerialUnsupported') : '浏览器不支持 Web Serial API，请使用 Chrome/Edge/Opera', 'error');
@@ -1731,6 +2537,10 @@ if (!('serial' in navigator)) {
   $('restoreBtn').disabled = true;
   $('backupCfgBtn').disabled = true;
   $('restoreCfgBtn').disabled = true;
+  const mcRead = $('modifycfgReadBtn');
+  const mcWrite = $('modifycfgWriteBtn');
+  if (mcRead) mcRead.disabled = true;
+  if (mcWrite) mcWrite.disabled = true;
   const wfRead = $('writefreqReadBtn');
   const wfWrite = $('writefreqWriteBtn');
   if (wfRead) wfRead.disabled = true;
@@ -1834,8 +2644,10 @@ const WRITE_FREQ_MR_MAX = 1024;
 const WRITE_FREQ_EXPORT_FILE_PREFIX = 'Dondji';
 /** 表格第 1 行对应的 MR 信道号（与 WRITE_FREQ_MR_MAX 一致，当前为 1–1024）；默认 1；Excel 导入表头须含「信道号」列 */
 let writefreqTableBaseChannel = 1;
-/** 内存中 N 条信道数据；界面仅渲染一页 WRITE_FREQ_PAGE_SIZE 行 */
-const WRITE_FREQ_PAGE_SIZE = 10;
+/** 内存中 N 条信道数据；界面仅渲染一页 writefreqPageSize 行 */
+const WRITE_FREQ_PAGE_SIZE_DEFAULT = 10;
+const WRITE_FREQ_PAGE_SIZE_MAX = 200;
+let writefreqPageSize = WRITE_FREQ_PAGE_SIZE_DEFAULT;
 let writefreqPageIndex = 0;
 let writefreqRowsData = null;
 /** SortableJS 实例（写频表格行拖拽） */
@@ -3062,7 +3874,7 @@ function writefreqEnsureModelInit() {
 
 function writefreqGetPageCount() {
   const total = WRITE_FREQ_MR_MAX;
-  const pageSize = WRITE_FREQ_PAGE_SIZE;
+  const pageSize = writefreqPageSize;
   const fullPages = Math.floor((total + pageSize - 1) / pageSize);
   return fullPages;
 }
@@ -3311,7 +4123,7 @@ function writefreqUpdatePaginationUI() {
   const filledVal = filledCount;
   const curVal = cur;
   const pagesVal = totalPages;
-  const sizeVal = WRITE_FREQ_PAGE_SIZE;
+  const sizeVal = writefreqPageSize;
   
   if (infoEl) {
     const totalLine = window.t 
@@ -3341,11 +4153,14 @@ function writefreqShowCurrentPage() {
   }
   const base = writefreqGetBaseChannel();
   const page = writefreqPageIndex;
-  const startSlot = page * WRITE_FREQ_PAGE_SIZE;
+  const startSlot = page * writefreqPageSize;
   const rowList = tbody.querySelectorAll('tr');
   let slot = 0;
-  for (; slot < WRITE_FREQ_PAGE_SIZE; slot++) {
+  for (; slot < writefreqPageSize; slot++) {
     const tr = rowList[slot];
+    if (!tr) {
+      break;
+    }
     const chIdx = startSlot + slot;
     if (chIdx >= WRITE_FREQ_MR_MAX) {
       tr.style.display = 'none';
@@ -3416,7 +4231,7 @@ function writefreqInitSortable() {
       if (oldIdx === undefined || newIdx === undefined) {
         return;
       }
-      const pageStart = writefreqPageIndex * WRITE_FREQ_PAGE_SIZE;
+      const pageStart = writefreqPageIndex * writefreqPageSize;
       const fromGlobal = pageStart + oldIdx;
       const toGlobal = pageStart + newIdx;
       if (fromGlobal < 0 || fromGlobal >= WRITE_FREQ_MR_MAX) {
@@ -3445,6 +4260,41 @@ function writefreqPageDelta(delta) {
   }
   writefreqPageIndex = next;
   writefreqShowCurrentPage();
+}
+
+/** 切换每页行数：先回写当前页，再按原首信道重算页码并重建表格 */
+function writefreqSetPageSize(rawSize) {
+  writefreqEnsureModelInit();
+  const parsed = Number.parseInt(String(rawSize).trim(), 10);
+  let nextSize = Number.isFinite(parsed)
+    ? parsed
+    : WRITE_FREQ_PAGE_SIZE_DEFAULT;
+  if (nextSize < 1) {
+    nextSize = WRITE_FREQ_PAGE_SIZE_DEFAULT;
+  }
+  if (nextSize > WRITE_FREQ_PAGE_SIZE_MAX) {
+    nextSize = WRITE_FREQ_PAGE_SIZE_MAX;
+  }
+  const prevSize = writefreqPageSize;
+  if (nextSize === prevSize) {
+    return;
+  }
+  writefreqFlushDomToModel();
+  const firstSlot = writefreqPageIndex * prevSize;
+  writefreqPageSize = nextSize;
+  const totalPages = writefreqGetPageCount();
+  writefreqPageIndex = Math.floor(firstSlot / nextSize);
+  if (writefreqPageIndex > totalPages - 1) {
+    writefreqPageIndex = Math.max(0, totalPages - 1);
+  }
+  if (writefreqPageIndex < 0) {
+    writefreqPageIndex = 0;
+  }
+  const sizeSel = $('writefreqPageSize');
+  if (sizeSel && String(nextSize) !== sizeSel.value) {
+    sizeSel.value = String(nextSize);
+  }
+  writefreqRebuildRows();
 }
 
 function writefreqGetBaseChannel() {
@@ -3480,7 +4330,7 @@ function writefreqRebuildRows() {
   });
   
   let r = 0;
-  for (; r < WRITE_FREQ_PAGE_SIZE; r++) {
+  for (; r < writefreqPageSize; r++) {
     const tr = document.createElement('tr');
     const tdDrag = document.createElement('td');
     tdDrag.className = 'wf-drag-handle';
@@ -3771,6 +4621,82 @@ async function writefreqReadFromDevice() {
   }
 }
 
+/**
+ * 写频批量传输：与固件 SPI_FLASH_READ/WRITE_SIZE 上限一致的区块大小。
+ * 整体流程为「整区读镜像 → 内存构建目标镜像 → 仅写差异区块 → 回读校验」，
+ * 将逐信道 3 次往返压缩为整区约 300 次往返，并把擦除/写入次数降到最低。
+ */
+const WRITE_FREQ_AREA_CHUNK = 120;
+
+function wfBytesEqual(a, b) {
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** 把区块字节偏移换算为信道号范围（用于失败提示精确定位） */
+function wfAreaChRangeLabel(areaBase, offset, length) {
+  const slotSize = areaBase === WRITE_FREQ_ATTR_BASE ? 2 : 16;
+  const first = Math.floor(offset / slotSize) + 1;
+  const last = Math.floor((offset + length - 1) / slotSize) + 1;
+  return first === last ? ('CH ' + first) : ('CH ' + first + '–' + last);
+}
+
+/** 整区读取为内存镜像（MR 区/命名区各 16KB，属性区 2KB） */
+async function wfReadAreaToImage(sessionTs, areaBase, totalLen, areaLabel, progressFrom, progressTo) {
+  const image = new Uint8Array(totalLen);
+  for (let off = 0; off < totalLen; off += WRITE_FREQ_AREA_CHUNK) {
+    const len = Math.min(WRITE_FREQ_AREA_CHUNK, totalLen - off);
+    const chunk = await spiFlashReadChunk(sessionTs, areaBase + off, len);
+    if (!chunk || chunk.length !== len) {
+      throw new Error('读取' + areaLabel + '区失败 @ ' + wfAreaChRangeLabel(areaBase, off, len));
+    }
+    image.set(chunk, off);
+    updateProgress(progressFrom + ((off + len) / totalLen) * (progressTo - progressFrom));
+    await sleep(5);
+  }
+  return image;
+}
+
+/**
+ * 差异区块写入 + 回读校验：仅写与当前镜像不同的 120B 区块，每块写后立即回读比对，
+ * 校验失败自动重写一次，仍失败则抛错并注明未完成范围（中止点之后保留机器原数据）。
+ */
+async function wfWriteDiffingArea(sessionTs, areaBase, currentImage, targetImage, areaLabel, progressFrom, progressTo) {
+  let writtenChunkCount = 0;
+  const totalLen = targetImage.length;
+  for (let off = 0; off < totalLen; off += WRITE_FREQ_AREA_CHUNK) {
+    const len = Math.min(WRITE_FREQ_AREA_CHUNK, totalLen - off);
+    const tgt = targetImage.subarray(off, off + len);
+    if (wfBytesEqual(currentImage.subarray(off, off + len), tgt)) {
+      continue;
+    }
+    const chLabel = wfAreaChRangeLabel(areaBase, off, len);
+    const writeOk = await spiFlashWriteChunk(sessionTs, areaBase + off, tgt);
+    if (!writeOk) {
+      throw new Error('写入' + areaLabel + '区失败 @ ' + chLabel + '（其后区块未写入）');
+    }
+    let verify = await spiFlashReadChunk(sessionTs, areaBase + off, len);
+    if (!verify || verify.length !== len || !wfBytesEqual(verify, tgt)) {
+      const retryOk = await spiFlashWriteChunk(sessionTs, areaBase + off, tgt);
+      verify = await spiFlashReadChunk(sessionTs, areaBase + off, len);
+      if (!retryOk || !verify || verify.length !== len || !wfBytesEqual(verify, tgt)) {
+        throw new Error(areaLabel + '区回读校验失败 @ ' + chLabel + '（其后区块未写入）');
+      }
+    }
+    writtenChunkCount++;
+    updateProgress(progressFrom + ((off + len) / totalLen) * (progressTo - progressFrom));
+    await sleep(5);
+  }
+  return writtenChunkCount;
+}
+
 async function writefreqWriteToDevice() {
   if (isWritefreqBusy) {
     return;
@@ -3844,6 +4770,7 @@ async function writefreqWriteToDevice() {
   writefreqShowValidation('', false);
 
   isWritefreqBusy = true;
+  let wfWritePhaseStarted = false;
   const readBtn = $('writefreqReadBtn');
   const writeBtn = $('writefreqWriteBtn');
   if (readBtn) readBtn.disabled = true;
@@ -3858,36 +4785,27 @@ async function writefreqWriteToDevice() {
     await sleep(800);
     const session = await requestDeviceInfoForCalib();
     const sessionTs = session.timestamp;
-    let rowIdx = 0;
+    // ---- 阶段一：整区读取当前镜像（MR 块区 / 命名区 / 属性区） ----
+    const mrImage = await wfReadAreaToImage(sessionTs, 0x0000, WRITE_FREQ_MR_MAX * 16, '信道数据', 0, 13);
+    const nameImage = await wfReadAreaToImage(sessionTs, WRITE_FREQ_ADDR_EN_BASE, WRITE_FREQ_MR_MAX * 16, '信道命名', 13, 26);
+    const attrImage = await wfReadAreaToImage(sessionTs, WRITE_FREQ_ATTR_BASE, WRITE_FREQ_MR_MAX * 2, '信道属性', 26, 30);
+
+    // ---- 阶段二：构建目标镜像（语义与逐槽写入完全一致：已填行合并写入；空行整槽擦除） ----
+    const mrTarget = new Uint8Array(WRITE_FREQ_MR_MAX * 16);
+    const nameTarget = new Uint8Array(WRITE_FREQ_MR_MAX * 16);
+    const attrTarget = new Uint8Array(WRITE_FREQ_MR_MAX * 2);
     let programmedCount = 0;
-    for (; rowIdx < WRITE_FREQ_MR_MAX; rowIdx++) {
-      /** 表格第 i 行对应 Flash MR 槽 i（CH i+1）：已填写接收频率则写入；否则将该槽擦除为未使用 */
+    for (let rowIdx = 0; rowIdx < WRITE_FREQ_MR_MAX; rowIdx++) {
       const chIndex0 = rowIdx;
       const fields = writefreqRowsData[rowIdx];
       const rxTrimmedWrite = writefreqSafeRxTrim(fields);
-      const baseAddr = chIndex0 * 16;
-      const enAddr = WRITE_FREQ_ADDR_EN_BASE + chIndex0 * 16;
-      const attrAddr = WRITE_FREQ_ATTR_BASE + chIndex0 * 2;
+      const baseOff = chIndex0 * 16;
+      const attrOff = chIndex0 * 2;
       if (rxTrimmedWrite === '') {
-        const erasedMain = writefreqErasedMrBlock16();
-        const writeEraseOk = await spiFlashWriteChunk(sessionTs, baseAddr, erasedMain);
-        if (!writeEraseOk) {
-          throw new Error('覆盖写入擦除信道失败 @ CH ' + (chIndex0 + 1));
-        }
-        const enBufClear = writefreqBuildChannelName16('');
-        const enClearOk = await spiFlashWriteChunk(sessionTs, enAddr, enBufClear);
-        if (!enClearOk) {
-          throw new Error('覆盖写入清空命名信道（统一区）失败 @ CH ' + (chIndex0 + 1));
-        }
-        /* 旧中文名区 0x020000 与字库位图重叠，禁止再擦写该区 */
-        const attrEraseBuf = new Uint8Array([0xff, 0xff]);
-        const attrEraseOk = await spiFlashWriteChunk(sessionTs, attrAddr, attrEraseBuf);
-        if (!attrEraseOk) {
-          throw new Error('覆盖写入信道属性（标记未使用）失败 @ CH ' + (chIndex0 + 1));
-        }
-        const pctEraseStep = ((rowIdx + 1) / WRITE_FREQ_MR_MAX) * 100;
-        updateProgress(pctEraseStep);
-        await sleep(40);
+        mrTarget.set(writefreqErasedMrBlock16(), baseOff);
+        nameTarget.set(writefreqBuildChannelName16(''), baseOff);
+        attrTarget[attrOff] = 0xff;
+        attrTarget[attrOff + 1] = 0xff;
         continue;
       }
       programmedCount++;
@@ -3919,38 +4837,38 @@ async function writefreqWriteToDevice() {
         stepSetting = WF_STEP_DEFAULT;
       }
       const scanlistVal = fields.scanlistVal !== undefined ? fields.scanlistVal : 0;
-      const original = await spiFlashReadChunk(sessionTs, baseAddr, 16);
-      if (!original || original.length !== 16) {
-        throw new Error('读取原信道块失败 @ CH ' + (chIndex0 + 1));
-      }
+      const original = mrImage.subarray(baseOff, baseOff + 16);
       const merged = wfMergeUserIntoBlock(original, rxStored, offsetStored, offsetDir, modNum, pow7, stepSetting, rxTone, txTone);
-      const writeMainOk = await spiFlashWriteChunk(sessionTs, baseAddr, merged);
-      if (!writeMainOk) {
-        throw new Error('写入信道数据失败 @ CH ' + (chIndex0 + 1));
-      }
-      const enBuf = writefreqBuildChannelName16(fields.channelNameText);
-      const enOk = await spiFlashWriteChunk(sessionTs, enAddr, enBuf);
-      if (!enOk) {
-        throw new Error('写入命名信道（统一区）失败 @ CH ' + (chIndex0 + 1));
-      }
-      /* 旧中文名区 0x020000 与字库位图重叠，禁止写入/清除，否则会破坏字形 */
-      const attrExisting = await spiFlashReadChunk(sessionTs, attrAddr, 2);
+      mrTarget.set(merged, baseOff);
+      nameTarget.set(writefreqBuildChannelName16(fields.channelNameText), baseOff);
+      const attrExisting = attrImage.subarray(attrOff, attrOff + 2);
       const attrValMerged = writefreqBuildAttrUint16ForProgram(attrExisting, rxStored, scanlistVal);
       const attrPayload = writefreqUint16ToLeBytes(attrValMerged);
-      const attrOk = await spiFlashWriteChunk(sessionTs, attrAddr, attrPayload);
-      if (!attrOk) {
-        throw new Error('写入信道属性失败 @ CH ' + (chIndex0 + 1));
-      }
-      const pctProgramStep = ((rowIdx + 1) / WRITE_FREQ_MR_MAX) * 100;
-      updateProgress(pctProgramStep);
-      await sleep(40);
+      attrTarget[attrOff] = attrPayload[0];
+      attrTarget[attrOff + 1] = attrPayload[1];
     }
+
+    // ---- 阶段三：差异区块写入 + 回读校验（MR → 命名 → 属性；属性最后写，作为生效提交点） ----
+    wfWritePhaseStarted = true;
+    const mrWritten = await wfWriteDiffingArea(sessionTs, 0x0000, mrImage, mrTarget, '信道数据', 30, 62);
+    const nameWritten = await wfWriteDiffingArea(sessionTs, WRITE_FREQ_ADDR_EN_BASE, nameImage, nameTarget, '信道命名', 62, 90);
+    const attrWritten = await wfWriteDiffingArea(sessionTs, WRITE_FREQ_ATTR_BASE, attrImage, attrTarget, '信道属性', 90, 95);
+
     updateProgress(100);
     const clearedSlotCount = WRITE_FREQ_MR_MAX - programmedCount;
     log(
-      window.t 
+      window.t
         ? window.t('writeSuccess', { count: programmedCount, empty: clearedSlotCount })
-        : '已按表格写入 ' + programmedCount + ' 个已填写信道；其余 ' + clearedSlotCount + ' 个槽已在 Flash 中清空为未使用（MR/命名/属性）。请先确认固件与备份。',
+        : '已按表格写入 ' + programmedCount + ' 个已填写信道；其余 ' + clearedSlotCount + ' 个槽已在 Flash 中清空为未使用（MR/命名/属性）。',
+      'success'
+    );
+    const writtenChunkTotal = mrWritten + nameWritten + attrWritten;
+    log(
+      window.t
+        ? window.t('writeSuccessVerified', { chunks: writtenChunkTotal })
+        : (writtenChunkTotal > 0
+          ? '本次共写入 ' + writtenChunkTotal + ' 个差异区块，已全部回读校验一致'
+          : 'Flash 内容与表格一致，无需写入任何区块'),
       'success'
     );
     log(window.t ? window.t('logRebootingDevice') : '正在重启设备以加载新信道数据…', 'info');
@@ -3959,6 +4877,9 @@ async function writefreqWriteToDevice() {
     log(window.t ? window.t('logRebootSent') : '已发送重启指令（设备将自动复位）', 'success');
   } catch (e) {
     log(window.t ? window.t('logWritefreqWriteFailed', {msg: e.message}) : '写频写入失败: ' + e.message, 'error');
+    if (wfWritePhaseStarted) {
+      log(window.t ? window.t('logWritefreqPartialHint') : '设备可能处于部分写入状态：错误位置之后的区块保留机器原数据，请重新执行写入即可完整覆盖', 'warning');
+    }
   } finally {
     isWritefreqBusy = false;
     if (readBtn) readBtn.disabled = false;
@@ -4384,32 +5305,13 @@ function writefreqImportSheet(rowsAoA) {
   /** 与 Flash 槽 0…1023 对齐：界面固定显示 CH1–CH1024 */
   writefreqTableBaseChannel = 1;
   writefreqEnsureModelInit();
-  let resetIdx = 0;
-  for (; resetIdx < WRITE_FREQ_MR_MAX; resetIdx++) {
-    writefreqRowsData[resetIdx] = writefreqEmptyRowFields();
-  }
   const dataRowCount = rowsAoA.length - 1;
-  if (idxCh >= 0 && dataRowCount > 0) {
-    const firstDataRow = rowsAoA[1];
-    const chFirstCell = firstDataRow && firstDataRow[idxCh];
-    const chFirst = Number.parseInt(String(chFirstCell).trim(), 10);
-    if (!Number.isFinite(chFirst)) {
-      log(window.t ? window.t('logFirstRowInvalid') : '首行数据信道号无效', 'error');
-      return;
-    }
-    if (chFirst !== 1) {
-      log(
-        '首行信道号须为 1（导入从 MR CH1 算起），当前为 ' +
-          chFirst +
-          '，已取消导入',
-        'error'
-      );
-      return;
-    }
-  }
   const cellStrFactory = function cellStrFactory(rowArr) {
     return function cellStr(idx) {
       if (idx < 0) {
+        return '';
+      }
+      if (!rowArr) {
         return '';
       }
       const raw = rowArr[idx];
@@ -4419,17 +5321,39 @@ function writefreqImportSheet(rowsAoA) {
       return String(raw);
     };
   };
+  /**
+   * 先完整校验并组装，成功后再清空写入。
+   * 避免中途失败时内存表已清空/半写、界面未刷新，翻页 flush 再把空页写回。
+   */
+  const pendingSlots = new Array(WRITE_FREQ_MR_MAX);
   let di = 0;
+  let firstDataSeen = false;
   for (; di < dataRowCount; di++) {
     const src = rowsAoA[di + 1];
     const cellStr = cellStrFactory(src);
     let destSlot = di;
     if (idxCh >= 0) {
-      const chCellRaw = cellStr(idxCh);
-      const chNumParsed = Number.parseInt(String(chCellRaw).trim(), 10);
+      const chCellRaw = cellStr(idxCh).trim();
+      // Excel used-range 常带末尾/中间空行：信道号为空则跳过，不当作错误
+      if (chCellRaw === '') {
+        continue;
+      }
+      const chNumParsed = Number.parseInt(chCellRaw, 10);
       if (!Number.isFinite(chNumParsed)) {
         log(window.t ? window.t('logRowChannelInvalid', {row: di + 1}) : '第 ' + (di + 1) + ' 行数据：信道号无效', 'error');
         return;
+      }
+      if (!firstDataSeen) {
+        if (chNumParsed !== 1) {
+          log(
+            '首行信道号须为 1（导入从 MR CH1 算起），当前为 ' +
+              chNumParsed +
+              '，已取消导入',
+            'error'
+          );
+          return;
+        }
+        firstDataSeen = true;
       }
       if (chNumParsed < 1 || chNumParsed > WRITE_FREQ_MR_MAX) {
         log(
@@ -4506,11 +5430,19 @@ function writefreqImportSheet(rowsAoA) {
         merged.offsetText = (offAbs / 1e6).toFixed(6);
       }
     }
-    writefreqRowsData[destSlot] = merged;
+    pendingSlots[destSlot] = merged;
+  }
+  if (idxCh >= 0 && dataRowCount > 0 && !firstDataSeen) {
+    log(window.t ? window.t('logFirstRowInvalid') : '首行数据信道号无效', 'error');
+    return;
+  }
+  let resetIdx = 0;
+  for (; resetIdx < WRITE_FREQ_MR_MAX; resetIdx++) {
+    writefreqRowsData[resetIdx] = pendingSlots[resetIdx] || writefreqEmptyRowFields();
   }
   writefreqPageIndex = 0;
   writefreqRebuildRows();
-  const importedRows = Math.min(dataRowCount, WRITE_FREQ_MR_MAX);
+  const importedRows = writefreqCountFilledRows();
   log(
     '已清空内存表格并导入 ' +
       importedRows +
@@ -4590,6 +5522,7 @@ if (writefreqImportBtnEl && writefreqImportFileEl) {
 
 const writefreqPagePrevEl = $('writefreqPagePrev');
 const writefreqPageNextEl = $('writefreqPageNext');
+const writefreqPageSizeEl = $('writefreqPageSize');
 if (writefreqPagePrevEl) {
   writefreqPagePrevEl.addEventListener('click', () => {
     writefreqPageDelta(-1);
@@ -4598,6 +5531,12 @@ if (writefreqPagePrevEl) {
 if (writefreqPageNextEl) {
   writefreqPageNextEl.addEventListener('click', () => {
     writefreqPageDelta(1);
+  });
+}
+if (writefreqPageSizeEl) {
+  writefreqPageSizeEl.value = String(writefreqPageSize);
+  writefreqPageSizeEl.addEventListener('change', () => {
+    writefreqSetPageSize(writefreqPageSizeEl.value);
   });
 }
 
@@ -5040,3 +5979,424 @@ flashStepsInitFloatingTooltips();
     }
   });
 })();
+
+// ========== MDC ADDRESS BOOK ==========
+/* SPI 0x011000 dedicated 4KB sector (after calib). Entry: 2B BE ID + 8B name. */
+const MDC_BOOK_SPI_BASE = 0x011000;
+const MDC_BOOK_SPI_SIZE = 0x1000;
+const MDC_BOOK_HEADER_SIZE = 16;
+const MDC_BOOK_ENTRY_SIZE = 10;
+const MDC_BOOK_MAX_ENTRIES = 400;
+const MDC_BOOK_NAME_LEN = 6;
+const MDC_BOOK_CHUNK = 120;
+
+let mdcbookBusy = false;
+let mdcbookRows = [];
+
+function mdcbookT(key, vars) {
+  if (window.t) {
+    try { return window.t(key, vars || {}); } catch (e) { /* fall through */ }
+  }
+  return key;
+}
+
+function mdcbookEmptyRow() {
+  return { id: '', name: '' };
+}
+
+// Filter hex only — do NOT padStart here; padding on every keystroke
+// fills maxLength and makes the field impossible to type into.
+function mdcbookNormalizeId(raw) {
+  const s = String(raw == null ? '' : raw).trim().toUpperCase().replace(/^0X/, '');
+  if (!s) return '';
+  if (!/^[0-9A-F]{1,4}$/.test(s)) return null;
+  return s;
+}
+
+function mdcbookPadId(idStr) {
+  return idStr ? idStr.padStart(4, '0') : '';
+}
+
+function mdcbookNormalizeName(raw) {
+  let s = String(raw == null ? '' : raw).trim().toUpperCase();
+  s = s.replace(/[^A-Z0-9]/g, '');
+  if (s.length > MDC_BOOK_NAME_LEN) s = s.slice(0, MDC_BOOK_NAME_LEN);
+  return s;
+}
+
+function mdcbookParseHexId(idStr) {
+  const n = parseInt(idStr, 16);
+  if (!Number.isFinite(n) || n < 1 || n > 0xFFFF) return 0;
+  return n;
+}
+
+function mdcbookUpdateCount() {
+  const el = $('mdcbookCount');
+  if (!el) return;
+  let used = 0;
+  for (const r of mdcbookRows) {
+    if (mdcbookParseHexId(r.id) && r.name) used++;
+  }
+  el.textContent = mdcbookT('mdcbookCountFmt', { used: used, max: MDC_BOOK_MAX_ENTRIES });
+}
+
+function mdcbookRender() {
+  const tbody = $('mdcbookTbody');
+  if (!tbody) return;
+  tbody.replaceChildren();
+  mdcbookRows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.dataset.index = String(idx);
+
+    const tdIdx = document.createElement('td');
+    tdIdx.className = 'mdcbook-index';
+    tdIdx.textContent = String(idx + 1);
+    tr.appendChild(tdIdx);
+
+    const tdId = document.createElement('td');
+    const inId = document.createElement('input');
+    inId.className = 'mdcbook-id-input';
+    inId.type = 'text';
+    inId.maxLength = 4;
+    inId.spellcheck = false;
+    inId.autocomplete = 'off';
+    inId.placeholder = '1A2B';
+    inId.value = row.id;
+    inId.addEventListener('input', () => {
+      const v = mdcbookNormalizeId(inId.value);
+      row.id = v === null ? inId.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 4) : v;
+      if (row.id !== inId.value) inId.value = row.id;
+      mdcbookUpdateCount();
+    });
+    inId.addEventListener('blur', () => {
+      const v = mdcbookNormalizeId(inId.value);
+      if (!v) return;
+      row.id = mdcbookPadId(v);
+      if (row.id !== inId.value) inId.value = row.id;
+      mdcbookUpdateCount();
+    });
+    tdId.appendChild(inId);
+    tr.appendChild(tdId);
+
+    const tdName = document.createElement('td');
+    const inName = document.createElement('input');
+    inName.className = 'mdcbook-name-input';
+    inName.type = 'text';
+    inName.maxLength = MDC_BOOK_NAME_LEN;
+    inName.spellcheck = false;
+    inName.autocomplete = 'off';
+    inName.placeholder = 'BD1AHN';
+    inName.value = row.name;
+    inName.addEventListener('input', () => {
+      row.name = mdcbookNormalizeName(inName.value);
+      if (row.name !== inName.value) inName.value = row.name;
+      mdcbookUpdateCount();
+    });
+    tdName.appendChild(inName);
+    tr.appendChild(tdName);
+
+    const tdDel = document.createElement('td');
+    tdDel.className = 'mdcbook-delete-cell';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mdcbook-row-delete-btn';
+    btn.setAttribute('aria-label', 'clearRow');
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+    btn.addEventListener('click', () => {
+      mdcbookRows.splice(idx, 1);
+      mdcbookRender();
+    });
+    tdDel.appendChild(btn);
+    tr.appendChild(tdDel);
+
+    tbody.appendChild(tr);
+  });
+  mdcbookUpdateCount();
+}
+
+function mdcbookCollectValidEntries() {
+  const seen = new Map();
+  const entries = [];
+  const tbody = $('mdcbookTbody');
+  const trs = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+  trs.forEach((tr) => tr.classList.remove('mdcbook-row-invalid'));
+
+  mdcbookRows.forEach((row, idx) => {
+    const idRaw = mdcbookNormalizeId(row.id);
+    const id = idRaw === null ? null : mdcbookPadId(idRaw);
+    const name = mdcbookNormalizeName(row.name);
+    const tr = trs[idx];
+    if (id === null || !id || !name) {
+      if (row.id || row.name) {
+        if (tr) tr.classList.add('mdcbook-row-invalid');
+      }
+      return;
+    }
+    const n = mdcbookParseHexId(id);
+    if (!n) {
+      if (tr) tr.classList.add('mdcbook-row-invalid');
+      return;
+    }
+    if (seen.has(id)) {
+      if (tr) tr.classList.add('mdcbook-row-invalid');
+      return;
+    }
+    seen.set(id, true);
+    entries.push({ id: n, idStr: id, name: name });
+  });
+  return entries;
+}
+
+function mdcbookBuildImage(entries) {
+  const img = new Uint8Array(MDC_BOOK_SPI_SIZE);
+  img.fill(0xFF);
+  img[0] = 0x4D;
+  img[1] = 0x44;
+  img[2] = 0x43;
+  img[3] = 0x41;
+  img[4] = 1;
+  img[5] = 0;
+  const count = Math.min(entries.length, MDC_BOOK_MAX_ENTRIES);
+  img[6] = count & 0xFF;
+  img[7] = (count >> 8) & 0xFF;
+  for (let i = 0; i < count; i++) {
+    const off = MDC_BOOK_HEADER_SIZE + i * MDC_BOOK_ENTRY_SIZE;
+    img[off] = (entries[i].id >> 8) & 0xFF;
+    img[off + 1] = entries[i].id & 0xFF;
+    for (let j = 0; j < MDC_BOOK_NAME_LEN; j++) {
+      img[off + 2 + j] = j < entries[i].name.length ? entries[i].name.charCodeAt(j) : 0;
+    }
+  }
+  return { img: img, count: count };
+}
+
+function mdcbookParseImage(buf) {
+  if (!buf || buf.length < MDC_BOOK_HEADER_SIZE) return [];
+  if (buf[0] !== 0x4D || buf[1] !== 0x44 || buf[2] !== 0x43 || buf[3] !== 0x41) return [];
+  if (buf[4] !== 1) return [];
+  let count = buf[6] | (buf[7] << 8);
+  if (count > MDC_BOOK_MAX_ENTRIES) count = MDC_BOOK_MAX_ENTRIES;
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const off = MDC_BOOK_HEADER_SIZE + i * MDC_BOOK_ENTRY_SIZE;
+    if (off + MDC_BOOK_ENTRY_SIZE > buf.length) break;
+    const id = (buf[off] << 8) | buf[off + 1];
+    if (!id) continue;
+    let name = '';
+    for (let j = 0; j < MDC_BOOK_NAME_LEN; j++) {
+      const c = buf[off + 2 + j];
+      if (c === 0 || c === 0xFF) break;
+      const ch = String.fromCharCode(c);
+      if (!/[A-Z0-9]/.test(ch)) break;
+      name += ch;
+    }
+    if (!name) continue;
+    rows.push({ id: id.toString(16).toUpperCase().padStart(4, '0'), name: name });
+  }
+  return rows;
+}
+
+async function mdcbookReadFromDevice() {
+  if (mdcbookBusy) return;
+  mdcbookBusy = true;
+  const readBtn = $('mdcbookReadBtn');
+  const writeBtn = $('mdcbookWriteBtn');
+  if (readBtn) readBtn.disabled = true;
+  if (writeBtn) writeBtn.disabled = true;
+  $('progressContainer').style.display = 'block';
+  updateProgress(0);
+  try {
+    if (!port) await connect();
+    readBuffer = [];
+    await sleep(800);
+    const session = await requestDeviceInfoForCalib();
+    const ts = session.timestamp;
+
+    const hdr = await spiFlashReadChunk(ts, MDC_BOOK_SPI_BASE, MDC_BOOK_HEADER_SIZE);
+    if (!hdr) throw new Error('读取通讯录表头失败');
+    updateProgress(20);
+
+    if (hdr[0] !== 0x4D || hdr[1] !== 0x44 || hdr[2] !== 0x43 || hdr[3] !== 0x41 || hdr[4] !== 1) {
+      mdcbookRows = [];
+      mdcbookRender();
+      log(mdcbookT('mdcbookReadEmpty'), 'info');
+      updateProgress(100);
+      return;
+    }
+    let count = hdr[6] | (hdr[7] << 8);
+    if (count > MDC_BOOK_MAX_ENTRIES) count = MDC_BOOK_MAX_ENTRIES;
+    if (count === 0) {
+      mdcbookRows = [];
+      mdcbookRender();
+      log(mdcbookT('mdcbookReadEmpty'), 'info');
+      updateProgress(100);
+      return;
+    }
+
+    const usedBytes = MDC_BOOK_HEADER_SIZE + count * MDC_BOOK_ENTRY_SIZE;
+    const payload = new Uint8Array(usedBytes);
+    payload.set(hdr, 0);
+    let off = MDC_BOOK_HEADER_SIZE;
+    while (off < usedBytes) {
+      const n = Math.min(MDC_BOOK_CHUNK, usedBytes - off);
+      const chunk = await spiFlashReadChunk(ts, MDC_BOOK_SPI_BASE + off, n);
+      if (!chunk) throw new Error('读取通讯录失败 @ 0x' + (MDC_BOOK_SPI_BASE + off).toString(16));
+      payload.set(chunk, off);
+      off += n;
+      updateProgress(20 + (off / usedBytes) * 80);
+      await sleep(5);
+    }
+
+    mdcbookRows = mdcbookParseImage(payload);
+    mdcbookRender();
+    updateProgress(100);
+    log(mdcbookT('mdcbookReadOk', { n: mdcbookRows.length }), 'success');
+  } catch (e) {
+    log(window.t ? window.t('logError', { msg: e.message }) : '错误: ' + e.message, 'error');
+  } finally {
+    mdcbookBusy = false;
+    if (readBtn) readBtn.disabled = false;
+    if (writeBtn) writeBtn.disabled = false;
+    if (port) await disconnect();
+    setTimeout(() => { $('progressContainer').style.display = 'none'; updateProgress(0); }, 800);
+  }
+}
+
+async function mdcbookWriteToDevice() {
+  if (mdcbookBusy) return;
+  const entries = mdcbookCollectValidEntries();
+  if (!entries.length) {
+    showAppToast(mdcbookT('mdcbookWriteEmpty'), 'warning');
+    return;
+  }
+  const firstDup = entries.findIndex((e, i) => entries.findIndex((x) => x.idStr === e.idStr) !== i);
+  if (firstDup >= 0) {
+    showAppToast(mdcbookT('mdcbookDupId', { id: entries[firstDup].idStr }), 'warning');
+    return;
+  }
+
+  mdcbookBusy = true;
+  const readBtn = $('mdcbookReadBtn');
+  const writeBtn = $('mdcbookWriteBtn');
+  if (readBtn) readBtn.disabled = true;
+  if (writeBtn) writeBtn.disabled = true;
+  $('progressContainer').style.display = 'block';
+  updateProgress(0);
+  try {
+    if (!port) await connect();
+    readBuffer = [];
+    await sleep(800);
+    const session = await requestDeviceInfoForCalib();
+    const ts = session.timestamp;
+
+    const built = mdcbookBuildImage(entries);
+    const usedBytes = MDC_BOOK_HEADER_SIZE + built.count * MDC_BOOK_ENTRY_SIZE;
+    for (let off = 0; off < usedBytes; off += MDC_BOOK_CHUNK) {
+      const n = Math.min(MDC_BOOK_CHUNK, usedBytes - off);
+      const slice = built.img.subarray(off, off + n);
+      const ok = await spiFlashWriteChunk(ts, MDC_BOOK_SPI_BASE + off, slice);
+      if (!ok) throw new Error('写入失败 @ 0x' + (MDC_BOOK_SPI_BASE + off).toString(16));
+      updateProgress(((off + n) / usedBytes) * 100);
+      await sleep(50);
+    }
+
+    updateProgress(100);
+    log(mdcbookT('mdcbookWriteOk', { n: built.count }), 'success');
+  } catch (e) {
+    log(window.t ? window.t('logError', { msg: e.message }) : '错误: ' + e.message, 'error');
+  } finally {
+    mdcbookBusy = false;
+    if (readBtn) readBtn.disabled = false;
+    if (writeBtn) writeBtn.disabled = false;
+    if (port) await disconnect();
+    setTimeout(() => { $('progressContainer').style.display = 'none'; updateProgress(0); }, 800);
+  }
+}
+
+function mdcbookExportCsv() {
+  const entries = mdcbookCollectValidEntries();
+  if (!entries.length) {
+    showAppToast(mdcbookT('mdcbookExportEmpty'), 'warning');
+    return;
+  }
+  const lines = ['MDC_ID,CALLSIGN'];
+  for (const e of entries) lines.push(e.idStr + ',' + e.name);
+  const blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Dondji-MDC-Book.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+function mdcbookImportCsvText(text) {
+  const rows = [];
+  let skip = 0;
+  const lines = String(text || '').split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (/^MDC_ID/i.test(t)) continue;
+    const parts = t.split(/[,;\t]/);
+    if (parts.length < 2) { skip++; continue; }
+    const idRaw = mdcbookNormalizeId(parts[0]);
+    const id = idRaw === null ? null : mdcbookPadId(idRaw);
+    const name = mdcbookNormalizeName(parts[1]);
+    if (id === null || !id || !name) { skip++; continue; }
+    if (!mdcbookParseHexId(id)) { skip++; continue; }
+    rows.push({ id: id, name: name });
+  }
+  const seen = new Set();
+  const uniq = [];
+  for (const r of rows) {
+    if (seen.has(r.id)) { skip++; continue; }
+    seen.add(r.id);
+    uniq.push(r);
+  }
+  const capped = uniq.slice(0, MDC_BOOK_MAX_ENTRIES);
+  if (uniq.length > MDC_BOOK_MAX_ENTRIES) skip += uniq.length - MDC_BOOK_MAX_ENTRIES;
+  return { rows: capped, skip: skip };
+}
+
+const mdcbookReadBtnEl = $('mdcbookReadBtn');
+if (mdcbookReadBtnEl) mdcbookReadBtnEl.addEventListener('click', () => { mdcbookReadFromDevice(); });
+const mdcbookWriteBtnEl = $('mdcbookWriteBtn');
+if (mdcbookWriteBtnEl) mdcbookWriteBtnEl.addEventListener('click', () => { mdcbookWriteToDevice(); });
+const mdcbookAddBtnEl = $('mdcbookAddBtn');
+if (mdcbookAddBtnEl) {
+  mdcbookAddBtnEl.addEventListener('click', () => {
+    if (mdcbookRows.length >= MDC_BOOK_MAX_ENTRIES) {
+      showAppToast(mdcbookT('mdcbookMaxRows', { max: MDC_BOOK_MAX_ENTRIES }), 'warning');
+      return;
+    }
+    mdcbookRows.push(mdcbookEmptyRow());
+    mdcbookRender();
+  });
+}
+const mdcbookExportBtnEl = $('mdcbookExportBtn');
+if (mdcbookExportBtnEl) mdcbookExportBtnEl.addEventListener('click', mdcbookExportCsv);
+const mdcbookImportBtnEl = $('mdcbookImportBtn');
+const mdcbookImportFileEl = $('mdcbookImportFile');
+if (mdcbookImportBtnEl && mdcbookImportFileEl) {
+  mdcbookImportBtnEl.addEventListener('click', () => mdcbookImportFileEl.click());
+  mdcbookImportFileEl.addEventListener('change', () => {
+    const file = mdcbookImportFileEl.files && mdcbookImportFileEl.files[0];
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      const res = mdcbookImportCsvText(String(fr.result || ''));
+      mdcbookRows = res.rows;
+      mdcbookRender();
+      let msg = mdcbookT('mdcbookImportOk', { n: res.rows.length });
+      if (res.skip) msg += ' · ' + mdcbookT('mdcbookImportSkip', { n: res.skip });
+      log(msg, res.rows.length ? 'success' : 'warn');
+      mdcbookImportFileEl.value = '';
+    };
+    fr.readAsText(file, 'utf-8');
+  });
+}
+
+mdcbookRender();
+
