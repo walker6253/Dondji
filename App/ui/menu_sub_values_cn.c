@@ -15,6 +15,7 @@ const char gSubMenu_OFF_ON_CN[][4] = {
 #ifdef ENABLE_AUDIO_BAR
 const char gSubMenu_MIC_BAR_STYLE_CN[][10] = {
     "\xe5\x85\xb3\xe9\x97\xad",             /* 关闭 */
+    "\xe6\xb3\xa2\xe5\xbd\xa2",             /* 波形 */
     "\xe5\xbc\xb9\xe7\xaa\x97",             /* 弹窗 */
 };
 #endif

@@ -438,7 +438,7 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
                 else if (mic_pair == 1u)
                     gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP;
                 else if (mic_pair == 2u)
-                    gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP; /* BAR retired */
+                    gSetting_mic_bar_display = MIC_BAR_DISPLAY_BAR;
                 else
                     gSetting_mic_bar_display = MIC_BAR_DISPLAY_POPUP;
             }
