@@ -1466,6 +1466,9 @@ void UI_DisplayAudioScope(void)
 #ifdef ENABLE_DTMF_CALLING
         || gDTMF_CallState != DTMF_CALL_STATE_NONE
 #endif
+#ifdef ENABLE_FEAT_F4HWN
+        || DualVfoMainFreqEntryScreen()
+#endif
         ) {
         return;
     }

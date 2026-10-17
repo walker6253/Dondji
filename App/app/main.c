@@ -452,7 +452,11 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
         if (is_key_seven) {
             if (bKeyPressed) {
-                APP_RunToolboxMenu();
+#ifdef ENABLE_FEAT_F4HWN_GAME
+                APP_RunCW();
+#else
+                gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+#endif
                 gRequestDisplayScreen = DISPLAY_MAIN;
             }
             return;
@@ -596,6 +600,11 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             if (gInputBoxIndex > totalDigits) {
                 gInputBoxIndex =  totalDigits;
 
+                return;
+            }
+
+            /* 未输入完全部位数前不改频率，避免输入一位就变成对应频率 */
+            if (gInputBoxIndex < totalDigits) {
                 return;
             }
 
