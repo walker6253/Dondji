@@ -1410,7 +1410,7 @@ void UI_DisplayAudioScope(void)
         return;
     }
 
-    if (gCurrentFunction != FUNCTION_TRANSMIT) {
+    if (gCurrentFunction != FUNCTION_TRANSMIT && !FUNCTION_IsRx()) {
         s_was_tx = false;
         return;
     }
