@@ -1293,13 +1293,28 @@ void APP_TimeSlice10ms(void)
         (gCurrentFunction == FUNCTION_TRANSMIT && activeMicBarUserTransmit) ||
         FUNCTION_IsRx())
     {
-        /* 条形：与改动前一致，约 150ms 刷新（FlashLightBlinkCounter 每 10ms +1 → %15）。
-           弹窗：约 20ms 刷新波形，沿用现有逻辑。 */
         if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_POPUP) {
             if ((gFlashLightBlinkCounter % 2u) == 0u) {
                 UI_DisplayMicBarTxPopup(gUpdateDisplayCurrent);
             }
         }
+#ifdef ENABLE_FEAT_F4HWN_AUDIO_SCOPE
+        else
+        {
+            /* BAR 模式：约 20ms 刷新滚动波形 */
+            if ((gFlashLightBlinkCounter % 2u) == 0u) {
+                UI_DisplayAudioScope();
+            }
+        }
+#else
+        else
+        {
+            /* BAR 模式（无 AudioScope）：约 150ms 刷新 */
+            if ((gFlashLightBlinkCounter % 15u) == 0u) {
+                UI_DisplayAudioBar();
+            }
+        }
+#endif
     }
 #endif
 

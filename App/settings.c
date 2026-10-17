@@ -1145,10 +1145,11 @@ void SETTINGS_SaveSettings(void)
     #ifdef ENABLE_AUDIO_BAR
         #ifdef ENABLE_FEAT_F4HWN
             State[7] &= ~(3u << 4);
-            if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_POPUP)
+            if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_BAR)
+                State[7] |= (2u << 4);
+            else if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_POPUP)
                 State[7] |= (1u << 4);
-            else if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_BAR)
-                State[7] |= (1u << 4); /* BAR retired — persist as popup */
+            /* OFF: leaves bits 4-5 cleared (0) */
         #else
             if (gSetting_mic_bar_display == MIC_BAR_DISPLAY_OFF)
                 State[7] &= ~(1u << 4);
