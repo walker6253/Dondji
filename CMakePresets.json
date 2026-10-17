@@ -187,13 +187,14 @@
                 "ENABLE_FEAT_F4HWN_SCREENSHOT": false,
                 "ENABLE_FEAT_F4HWN_GAME": false,
                 "ENABLE_FEAT_F4HWN_SPECTRUM": true,
-                "ENABLE_FEAT_F4HWN_PMR": true,
-                "ENABLE_FEAT_F4HWN_GMRS_FRS_MURS": true,
+                "ENABLE_FEAT_F4HWN_PMR": false,
+                "ENABLE_FEAT_F4HWN_GMRS_FRS_MURS": false,
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": false,
                 "ENABLE_FEAT_F4HWN_VOL": false,
                 "ENABLE_FEAT_F4HWN_AUDIO": true,
-                "ENABLE_FEAT_F4HWN_RX_TX_TIMER": false,
-                "ENABLE_FEAT_F4HWN_AUDIO_SCOPE": false,
+                "ENABLE_FEAT_F4HWN_CA": false,
+                "ENABLE_FEAT_F4HWN_AUDIO_SCOPE": true,
+                "ENABLE_FEAT_F4HWN_SLEEP": false,
                 "EDITION_STRING": "Fusion",
                 "TARGET": "Dondji.fusion"
             }
